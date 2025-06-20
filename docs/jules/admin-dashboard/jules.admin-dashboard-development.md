@@ -1,0 +1,223 @@
+# Admin Dashboard: Frontend Development (React/Polaris)
+
+This document outlines the development of the Administrative Dashboard's frontend using React and Shopify Polaris. The dashboard will be a web application hosted on Firebase Hosting, interacting with the Firebase Cloud Functions backend.
+
+## 1. Frontend Project Setup
+
+(Derived from Grok Outline Section 4.1, adapted for React/Polaris and Firebase Hosting)
+
+### 1.1. Initialize React Project
+*   Use Create React App or Vite to scaffold a new React application in the `admin-dashboard-ui` directory (or your chosen frontend directory).
+    ```bash
+    # Using Create React App
+    npx create-react-app admin-dashboard-ui
+    cd admin-dashboard-ui
+
+    # OR Using Vite (recommended for faster setup)
+    npm create vite@latest admin-dashboard-ui -- --template react
+    cd admin-dashboard-ui
+    npm install
+    ```
+*   **Install Shopify Polaris and related dependencies:**
+    ```bash
+    npm install @shopify/polaris @shopify/app-bridge-react
+    # App Bridge might not be strictly necessary if this is a standalone admin panel not embedded in Shopify,
+    # but Polaris components are still useful for UI consistency if admins are familiar with Shopify.
+    # If it IS embedded or needs to interact like an embedded app, App Bridge is key.
+    # For a standalone admin panel, direct Firebase Auth is more likely for admin users.
+    ```
+    Consider if `@shopify/app-bridge-react` is needed if this admin panel is *not* an embedded Shopify app. If it's purely for your own administrative staff, direct Firebase Authentication for admins is the primary auth mechanism. Polaris can still be used for its UI components.
+
+### 1.2. Configure Firebase Hosting
+*   In your main `firebase.json` (project root), configure Firebase Hosting to serve the build output of your React application.
+    ```json
+    {
+      "hosting": {
+        "public": "admin-dashboard-ui/build", // Or "admin-dashboard-ui/dist" if using Vite
+        "ignore": [
+          "firebase.json",
+          "**/.*",
+          "**/node_modules/**"
+        ],
+        "rewrites": [
+          {
+            "source": "/api/admin/**", // Or just /admin/** if your function routes are prefixed
+            "function": "api" // Or your specific Cloud Function name for admin APIs
+          },
+          {
+            "source": "**",
+            "destination": "/index.html"
+          }
+        ]
+      }
+      // ... other firebase configurations (functions, etc.)
+    }
+    ```
+    *   The first rewrite directs API calls from the admin dashboard (e.g., to `/api/admin/...`) to your main Cloud Function. Adjust the `source` path and `function` name as needed.
+    *   The second rewrite is standard for Single Page Applications (SPAs).
+
+### 1.3. Firebase SDK for Frontend
+*   Install the Firebase JavaScript SDK to interact with Firebase Authentication (for admin login) and potentially Firestore if admins need direct (but secure and rule-protected) read access for some data.
+    ```bash
+    npm install firebase
+    ```
+*   Initialize Firebase in your React app (e.g., in `src/firebaseConfig.js`):
+    ```javascript
+    // src/firebaseConfig.js
+    import { initializeApp } from "firebase/app";
+    import { getAuth } from "firebase/auth";
+    // import { getFirestore } from "firebase/firestore"; // If needed
+
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_AUTH_DOMAIN",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_STORAGE_BUCKET",
+      messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    // const db = getFirestore(app); // If direct Firestore access is planned
+
+    export { auth /*, db */ };
+    ```
+    *   Store your Firebase project configuration securely, typically using environment variables (e.g., `REACT_APP_FIREBASE_API_KEY`).
+
+## 2. Core UI Components & Layout
+
+(Derived from Grok Outline Section 4.1)
+
+### 2.1. AppProvider (Polaris)
+*   Wrap your main React application component (e.g., `App.js`) with Shopify Polaris's `AppProvider` to enable Polaris styling and features.
+    ```jsx
+    // src/App.js
+    import React from 'react';
+    import { AppProvider } from '@shopify/polaris';
+    import enTranslations from '@shopify/polaris/locales/en.json';
+    import '@shopify/polaris/build/esm/styles.css';
+    // ... other imports (Router, components)
+
+    function App() {
+      return (
+        <AppProvider i18n={enTranslations}>
+          {/* Your Router and main layout components go here */}
+        </AppProvider>
+      );
+    }
+    export default App;
+    ```
+
+### 2.2. Routing
+*   Implement client-side routing using a library like `react-router-dom`.
+    ```bash
+    npm install react-router-dom
+    ```
+*   Define routes for login, dashboard overview, tenant management, subscription details, etc.
+
+### 2.3. Main Layout
+*   Create a main layout component that includes navigation (e.g., a Polaris `Navigation` component) and a content area for different pages.
+*   Protected routes should only be accessible after admin authentication.
+
+### 2.4. Authentication UI (Login Page)
+*   Create a login page (` LoginPage.js `) using Polaris components (`TextField`, `Button`, `Card`).
+*   Use Firebase Authentication SDK to handle admin sign-in (e.g., `signInWithEmailAndPassword`).
+*   Store ID token upon successful login (e.g., in React context, state management, or even `localStorage` with care) to be sent with API requests to your backend.
+
+    ```jsx
+    // Example: Basic Login Functionality
+    // In your LoginPage component
+    // import { auth } from './firebaseConfig';
+    // import { signInWithEmailAndPassword } from "firebase/auth";
+    // ...
+    // const handleLogin = async () => {
+    //   try {
+    //     const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    //     const idToken = await userCredential.user.getIdToken();
+    //     // Store idToken, navigate to dashboard
+    //   } catch (error) {
+    //     // Handle login error
+    //   }
+    // };
+    ```
+
+## 3. Admin Dashboard Features UI & Logic
+
+(Derived from Grok Outline Sections 4.2, 4.3, 4.4)
+
+The admin dashboard will provide UIs for managing tenants, subscriptions, credentials (status, not values), and monitoring API usage. All data operations will be performed by making authenticated API calls to your Firebase Cloud Functions backend.
+
+### 3.1. Tenant (Shop) Management UI
+*   **Shop List Page:**
+    *   Display a table (`DataTable` in Polaris) of all shops/tenants.
+    *   Columns: Shop ID/Name, Plan, Subscription Status, Install Date, Actions (e.g., "View Details").
+    *   Fetch data from `/api/admin/shops` backend endpoint.
+*   **Shop Details Page:**
+    *   Display detailed information for a selected shop.
+    *   Allow admins to:
+        *   View current plan and subscription status.
+        *   Change a shop's plan (triggers backend call to update Stripe & Firestore).
+        *   View list of stored credential types (e.g., "Google Ads Token: Set", "Gemini Key: Not Set").
+        *   Potentially trigger actions like "Request Re-authentication" for a credential, which would involve backend logic.
+        *   View API usage logs/summary for the shop.
+
+### 3.2. Subscription Management UI
+*   Integrated into the **Shop Details Page** or a separate section.
+*   **Functionality:**
+    *   View current subscription details (plan, price, status, next billing date) fetched from your backend (which gets it from Stripe/Firestore).
+    *   Allow admins to manually change a tenant's plan. This action will:
+        *   Call a backend endpoint (e.g., `/api/admin/shops/:shop_id/subscriptions`).
+        *   The backend then interacts with Stripe to update the subscription and updates Firestore accordingly.
+    *   Display billing history (if Stripe API provides this easily and backend exposes it).
+    *   Apply/view discount codes (if admin has this capability).
+
+### 3.3. Credential Management UI (Status & Actions)
+*   Typically on the **Shop Details Page**.
+*   **Functionality:**
+    *   **Display Status:** Show which credential types are configured for the tenant (e.g., "Google Ads Refresh Token: Present", "Gemini AI API Key: Not Set"). **Do NOT display the actual encrypted credentials.**
+    *   **Actions:**
+        *   **Trigger Re-OAuth:** For OAuth-based credentials like Google Ads, a button to "Invalidate & Request Re-authentication" might be useful. This tells the backend to mark the current token as needing refresh and possibly notify the tenant.
+        *   **Delete Credential:** Allow an admin to delete a specific stored credential for a tenant (with strong confirmation).
+    *   **Toggle Developer-Provided Credentials:** If a tenant is on a plan that allows choosing between their own vs. developer-provided keys for certain APIs (e.g., Gemini AI):
+        *   A toggle/select list for the admin to change this setting.
+        *   This action calls a backend endpoint. The backend updates Firestore (`shops/{shop_id}.developerCredentialsOptIn`) and potentially triggers a Stripe subscription update if this change affects billing (e.g., moves to a different Stripe Price ID).
+
+### 3.4. API Usage Monitoring UI
+*   On the **Shop Details Page** or a dedicated "API Usage" section.
+*   **Functionality:**
+    *   Display API usage for a selected tenant (fetched from `/api/admin/shops/:shop_id/usage` or similar backend endpoint).
+    *   Show usage against quotas for different API types (e.g., "Gemini AI Calls: 350/500 this month").
+    *   Provide charts or summaries of usage over time.
+    *   Admins might have tools to view global API usage across all tenants (from `/api/admin/usage_summary`).
+
+### 3.5. Making Authenticated API Calls to Backend
+*   All `fetch` or `axios` calls from the React admin dashboard to your backend API (Cloud Functions) must include the Firebase Auth ID token in the `Authorization` header.
+    ```javascript
+    // Example API call utility
+    // async function adminApiFetch(path, options = {}, idToken) {
+    //   const defaultHeaders = {
+    //     'Authorization': `Bearer ${idToken}`,
+    //     'Content-Type': 'application/json',
+    //   };
+    //   const config = {
+    //     ...options,
+    //     headers: {
+    //       ...defaultHeaders,
+    //       ...options.headers,
+    //     },
+    //   };
+    //   const response = await fetch(`/api/admin${path}`, config); // Assuming /api/admin prefix from hosting rewrite
+    //   if (!response.ok) {
+    //     const errorData = await response.json().catch(() => ({ message: response.statusText }));
+    //     throw new Error(errorData.message || `API request failed with status ${response.status}`);
+    //   }
+    //   return response.json();
+    // }
+
+    // Usage:
+    // const shops = await adminApiFetch('/shops', {}, firebaseUser.idToken);
+    ```
+
+This frontend structure, built with React and Shopify Polaris, and interacting with a secure Firebase backend, will provide administrators with the tools they need to manage the application and its tenants.
