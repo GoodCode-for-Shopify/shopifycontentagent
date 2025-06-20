@@ -398,6 +398,7 @@ We'll use Firestore to store tenant-specific data, primarily the API credentials
     // (e.g., from a verified Shopify session/JWT) and only operates on that `shopId`'s document.
     // The Firestore rules then act as a secondary defense.
     // A simpler rule set focusing on backend-only write access for credentials:
+    // The commented section below shows an alternative, more restrictive set of rules, relying more heavily on Admin SDK bypass for backend operations.
     /*
     rules_version = '2';
     service cloud.firestore {
@@ -475,10 +476,10 @@ This section details how the backend (Cloud Functions) will handle the storage, 
             }
         } catch (error) {
             console.error("Error accessing functions.config().secrets.encryption_key. Make sure it's set.", error);
-            // Handle error: perhaps the config isn't set, or emulators don't have it via this method.
-            // For local emulation, you might need to set this in .runtimeconfig.json or handle differently.
+            // Handle error: the config might not be set, or emulators might not have it via functions.config().
+            // For local emulation, you might need to set this in a `functions/.runtimeconfig.json` file.
             // See: https://firebase.google.com/docs/functions/local-emulator#set_up_functions_configuration
-            // Example for .runtimeconfig.json in functions directory: { "secrets": { "encryption_key": "your_64_char_hex_key_for_local_testing" } }
+            // (As noted below, an example for .runtimeconfig.json is: { "secrets": { "encryption_key": "your_64_char_hex_key_for_local_testing" } })
         }
 
 
@@ -831,7 +832,7 @@ Integrating with Shopify requires your backend to securely handle requests origi
       jwksUri: `https://shopify-app-jwks.shopifycloud.com/YOUR_SHOPIFY_APP_API_KEY/.well-known/jwks.json`
       // IMPORTANT: Replace YOUR_SHOPIFY_APP_API_KEY with your actual Shopify App's API key.
       // You might want to make YOUR_SHOPIFY_APP_API_KEY a Firebase config variable.
-      // e.g., functions.config().shopify.api_key
+      // e.g., functions.config().shopify.api_key (recommended: load YOUR_SHOPIFY_APP_API_KEY from Firebase config)
     });
 
     function getKey(header, callback) {
@@ -973,3 +974,240 @@ Integrating with Shopify requires your backend to securely handle requests origi
     *   Your backend will need a function similar to `getDecryptedCredential` to retrieve and decrypt this Shopify access token when needed.
 
 This setup ensures that your backend can securely identify the Shopify store making the request and then use the correct set of credentials for any third-party API interactions. Remember to thoroughly test the JWT validation and the overall flow.
+
+## Security Best Practices - Server-Side
+
+Security is paramount, especially when dealing with sensitive credentials and multi-tenant data. Here are key server-side security best practices to implement:
+
+1.  **Secure Credential Storage:**
+    *   **Encryption at Rest:** As implemented, always encrypt sensitive credentials (API keys, refresh tokens, Shopify access tokens) in Firestore using strong encryption (AES-256).
+    *   **Encryption Key Management:** Store your primary encryption key outside of the database and codebase. Use Firebase environment configuration (`functions.config().secrets.encryption_key`) or, for higher security, Google Cloud Secret Manager. Regularly rotate this key if policies require, though this involves re-encrypting all stored credentials.
+    *   **Least Privilege for Encryption Key:** Ensure only necessary Cloud Functions (specifically, the ones handling credential storage/retrieval) have access to the encryption key.
+
+2.  **Secure Communication (HTTPS):**
+    *   All communication between the Shopify frontend, your backend APIs (Cloud Functions), and third-party APIs must use HTTPS. Firebase Hosting and Cloud Functions enforce HTTPS by default.
+
+3.  **Strong Authentication and Authorization:**
+    *   **Verify All Incoming Requests:**
+        *   For requests from your Shopify App frontend (App Bridge), rigorously validate the Shopify session token (JWT) as detailed in the "Shopify App Backend Logic" section. Check signature, issuer, audience, and expiry.
+        *   For Shopify webhooks, verify the HMAC signature using your app's shared secret.
+    *   **Principle of Least Privilege for API Access:** Ensure that the API keys your application uses (both your app-wide keys and tenant-provided keys) have only the minimum necessary permissions required for their function.
+    *   **Isolate Tenant Data:** Your backend logic must strictly ensure that operations for one shop (`shop_id`) cannot inadvertently access or affect data from another shop. This is primarily enforced by using the authenticated `shop_id` in all database queries and operations.
+
+4.  **Input Validation and Sanitization:**
+    *   Validate all incoming data to your API endpoints (parameters, request bodies).
+    *   Check for correct data types, formats, lengths, and ranges.
+    *   Sanitize inputs to prevent injection attacks (e.g., NoSQL injection if constructing Firestore queries dynamically from user input, though using the Admin SDK's object mapping methods largely mitigates this for Firestore). Express middleware like `express-validator` can be helpful.
+
+5.  **Secure Firestore Rules:**
+    *   While the Firebase Admin SDK in your Cloud Functions bypasses Firestore rules by default, well-defined rules provide defense in depth, especially if any part of your system ever attempts direct client access or if there's a vulnerability in a function.
+    *   For data exclusively managed by the backend (like encrypted credentials), rules can be set to `allow read, write: if false;`, relying on the Admin SDK's privileged access.
+    *   For any data that might be read by an authenticated client, ensure rules correctly check `request.auth.token.shop_id == shopId`.
+
+6.  **Environment Variable and Secret Management:**
+    *   Store all secrets (API keys, client secrets, your main encryption key) in Firebase environment configuration or Google Cloud Secret Manager.
+    *   Do not hardcode secrets in your source code.
+    *   Add `.runtimeconfig.json` (used by emulators for local secrets) to `.gitignore`.
+
+7.  **Regular Dependency Audits:**
+    *   Regularly update your npm packages (`npm update`) to patch known vulnerabilities.
+    *   Use `npm audit` to check for vulnerabilities in your dependencies and `npm audit fix` to attempt to resolve them.
+
+8.  **Comprehensive Logging and Monitoring:**
+    *   Use Firebase Functions logging (`functions.logger`) to log important events, errors, and suspicious activities. Avoid logging sensitive data like raw credentials.
+    *   Monitor function performance, error rates, and execution times in the Google Cloud Console or Firebase Console. Set up alerts for unusual activity.
+
+9.  **Error Handling:**
+    *   Implement robust error handling in your functions.
+    *   Catch exceptions and return appropriate HTTP status codes and error messages.
+    *   Avoid leaking sensitive information or stack traces in error messages sent to the client.
+
+10. **Rate Limiting and Abuse Protection:**
+    *   Consider implementing rate limiting on your API endpoints if abuse is a concern, though Cloud Functions offer some inherent protection against certain types of DoS attacks due to their scaling nature. For specific business logic abuse, you might need custom rate limiting (e.g., based on `shop_id`).
+    *   Google Cloud Armor can be used in front of HTTP(S) Load Balancers if you route Cloud Functions through one, providing WAF and DDoS protection.
+
+11. **Service Account Permissions (Least Privilege):**
+    *   By default, Firebase Cloud Functions run with a service account that has broad permissions within your GCP project (Editor role).
+    *   For enhanced security, especially in production, create custom IAM roles with only the necessary permissions (e.g., Firestore read/write, Secret Manager access, Pub/Sub invoker if used) and assign this role to the service account used by your functions.
+
+12. **Regular Security Reviews and Testing:**
+    *   Periodically review your codebase, configurations, and security rules for potential vulnerabilities.
+    *   Consider penetration testing for mature applications.
+
+By following these best practices, you can significantly enhance the security posture of your server-side application.
+
+## Deployment
+
+Once you have developed and tested your Firebase Functions and frontend, you need to deploy them.
+
+1.  **Deploying Cloud Functions:**
+    *   Ensure you have configured all necessary environment variables for your functions using the Firebase CLI (e.g., `firebase functions:config:set ...`).
+    *   From your project's root directory (or the `functions` directory, though root is often easier to manage all Firebase deployments), run the following command:
+        ```bash
+        firebase deploy --only functions
+        ```
+    *   If you want to deploy a specific function (e.g., your main API function if you named it `api`):
+        ```bash
+        firebase deploy --only functions:api
+        ```
+    *   The first deployment might take a few minutes. Subsequent deployments are usually faster.
+    *   After deployment, the Firebase CLI will output the URL(s) of your HTTP functions.
+
+2.  **Deploying Firebase Hosting (for your React/Polaris UI):**
+    *   First, you need to build your React application for production. Typically, this involves running a build script defined in your frontend's `package.json`:
+        ```bash
+        # Assuming your React app is in a 'frontend' directory
+        cd frontend
+        npm run build
+        cd ..
+        ```
+    *   Configure `firebase.json` to point to your frontend's build directory. For example, if your React app is in a `frontend` directory and its build output is in `frontend/build`:
+        ```json
+        {
+          "functions": {
+            "source": "functions",
+            "runtime": "nodejs18"
+          },
+          "hosting": {
+            "public": "frontend/build", // Or your React app's build output directory
+            "ignore": [
+              "firebase.json",
+              "**/.*",
+              "**/node_modules/**"
+            ],
+            "rewrites": [
+              {
+                // Optional: Rewrite all /api/* calls to your 'api' Cloud Function
+                "source": "/api/**",
+                "function": "api" // Assumes your main Express app function is named 'api'
+              },
+              {
+                // For single-page apps (SPA) like React, rewrite all other paths to index.html
+                "source": "**",
+                "destination": "/index.html"
+              }
+            ]
+          }
+        }
+        ```
+        *   The `rewrites` section is important:
+            *   The first rewrite (optional but common) directs traffic from your Firebase Hosting URL (e.g., `https://your-app.web.app/api/...`) to your Cloud Function named `api`. This allows your frontend and backend to share the same domain, simplifying CORS.
+            *   The second rewrite ensures that all paths are directed to `index.html`, which is standard for SPAs like React that handle their own routing.
+    *   Deploy your hosting content:
+        ```bash
+        firebase deploy --only hosting
+        ```
+    *   After deployment, your React/Polaris UI will be live at your Firebase Hosting URL (e.g., `your-project-id.web.app` or a custom domain if you've configured one).
+
+3.  **Deploying Both Simultaneously:**
+    *   You can deploy all Firebase features defined in your `firebase.json` at once:
+        ```bash
+        firebase deploy
+        ```
+
+4.  **Setting up Regions for Cloud Functions:**
+    *   For 2nd Gen functions, you typically specify the region in the function definition code itself. If not specified, it defaults to `us-central1`.
+        ```javascript
+        // In functions/src/index.js
+        // exports.api = functions.region('europe-west1').https.onRequest(app);
+        ```
+    *   Choose regions close to your users or other services you interact with for lower latency.
+
+5.  **Monitoring Deployments:**
+    *   Check the Firebase Console for deployment status, function logs (under "Functions" > "Logs"), and hosting details.
+    *   Use `firebase emulators:start` for local testing before deploying to minimize issues.
+
+Regularly deploy updates and ensure your deployment process is smooth and repeatable. Consider setting up CI/CD (Continuous Integration/Continuous Deployment) using tools like GitHub Actions, Google Cloud Build, or others for automated builds and deployments.
+
+## Frontend Setup (React/Polaris) - Brief Overview
+
+While this document focuses on the server-side and database setup, here's a brief overview of how the frontend (React with Shopify Polaris) will interact with the backend:
+
+1.  **Technology Stack:**
+    *   **React:** A JavaScript library for building user interfaces.
+    *   **Shopify Polaris:** Shopify's design system and React component library, used to create UIs that look and feel native to the Shopify admin.
+    *   **Shopify App Bridge:** A JavaScript library that enables your embedded app (running in an iframe in Shopify admin) to communicate with the Shopify admin parent page (e.g., to display modals, loading indicators, or get session tokens).
+
+2.  **Key Frontend Responsibilities:**
+    *   **User Interface:** Building the settings pages where users can input their API credentials for third-party services. This will involve using Polaris components for forms, buttons, text fields, etc.
+    *   **API Communication:**
+        *   Making authenticated AJAX/fetch requests to your backend (Cloud Functions) to save and potentially retrieve (though usually not directly display) credential configurations.
+        *   Sending the Shopify session token (obtained via App Bridge) in the `Authorization` header of every request to your backend for verification.
+    *   **Initiating OAuth Flows:**
+        *   For services requiring OAuth (like Google Ads), the frontend will have "Connect" buttons that redirect the user to your backend's OAuth initiation endpoint (e.g., `/api/oauth/google/initiate`). The backend then handles the redirect to the third-party provider.
+        *   After the user authorizes the third-party application, they are redirected back to your backend's callback URL, which processes the tokens and then typically redirects the user back to a specific page in your app's frontend within the Shopify admin.
+    *   **Displaying Data:** Fetching and displaying data from third-party services (via your backend, which uses the stored credentials) or displaying status information.
+
+3.  **Authentication with Backend:**
+    *   As mentioned, the frontend will use Shopify App Bridge (`authenticatedFetch` or by getting the session token manually) to make requests to your backend.
+    *   Example:
+        ```javascript
+        // In your React component
+        import { useAppBridge } from '@shopify/app-bridge-react';
+        // Or for older versions: import { AppBridgeContext } from '@shopify/app-bridge-react/context';
+
+        const app = useAppBridge();
+
+        async function saveCredentials(credentialType, data) {
+          const token = await app.getState().then(state => state.token); // Or app.sessionToken() in newer AppBridge
+
+          const response = await fetch(`/api/credentials/${credentialType}`, { // Assumes hosting rewrite for /api
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Failed to save credentials');
+          }
+          return response.json();
+        }
+        ```
+
+4.  **Project Structure (Example):**
+    *   You might have a `frontend` directory alongside your `functions` directory:
+        ```
+        project-root/
+        ├── functions/      // Backend Cloud Functions
+        ├── frontend/       // React/Polaris app
+        │   ├── src/
+        │   ├── public/
+        │   └── package.json
+        ├── firebase.json
+        └── .firebaserc
+        ```
+
+This overview should help in understanding how the frontend components will integrate with the backend services established in this guide. The actual implementation of the React/Polaris app is a separate development effort.
+
+## Conclusion
+
+This document has provided a comprehensive guide to setting up the server-side infrastructure for a multi-tenant Shopify app using Firebase and Node.js/Express. We've covered:
+
+*   **Firebase Project Setup:** Configuring Firestore for data storage and Firebase Hosting for your frontend.
+*   **Backend Development:** Building a Node.js/Express API using Cloud Functions for Firebase (2nd Gen) to handle business logic.
+*   **Database Design:** Structuring Firestore for multi-tenancy, focusing on a `shops` collection to store per-tenant data, including Shopify access tokens and third-party API credentials.
+*   **Secure Credential Management:** Implementing robust encryption (AES-256) for sensitive credentials stored in Firestore, managing encryption keys securely, and setting up API endpoints for credential storage and OAuth flow handling.
+*   **Shopify Integration:** Authenticating requests from your Shopify embedded app using JWTs and utilizing the `shop_id` to manage data and API calls on a per-tenant basis.
+*   **Security Best Practices:** Highlighting crucial security measures for protecting your application and user data.
+*   **Deployment:** Steps to deploy your Cloud Functions and React/Polaris frontend to Firebase.
+*   **Frontend Interaction:** A brief overview of how your React/Polaris frontend will communicate with the established backend.
+
+By following these steps, you can build a scalable, secure, and efficient backend system for your Shopify app, capable of managing individual user credentials for various third-party API integrations.
+
+**Next Steps:**
+
+1.  **Implement Frontend:** Develop your React/Polaris frontend, including the settings pages for credential input and the logic to call your backend APIs.
+2.  **Thorough Testing:**
+    *   Test all API endpoints extensively.
+    *   Test the OAuth flows with actual third-party services.
+    *   Test the Shopify JWT authentication and overall app flow within a Shopify development store.
+    *   Perform security testing.
+3.  **Refine Security Rules:** Continuously review and refine your Firestore security rules as your application evolves.
+4.  **Shopify App Store Submission:** Familiarize yourself with Shopify's app store requirements, particularly around security and user experience, before submitting your app.
+5.  **Monitoring and Maintenance:** Set up ongoing monitoring for your Cloud Functions and Firestore instance. Plan for regular maintenance and updates.
+
+Building a multi-tenant Shopify app with these capabilities is a complex but rewarding endeavor. This guide provides a solid foundation for your server-side development. Good luck!
