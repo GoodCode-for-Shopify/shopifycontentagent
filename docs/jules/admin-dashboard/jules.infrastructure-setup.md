@@ -119,6 +119,11 @@ While `docs/jules/serverside-setup.md` covers the basic `shops` collection for c
     *   The React/Polaris admin dashboard frontend will be hosted on **Firebase Hosting**. This replaces Vercel from the Grok document.
 *   **Environment Variables:**
     *   All sensitive keys (Stripe keys, Google API client secrets for OAuth, our own encryption key if using `functions.config()`) will be stored as Firebase environment variables or in Google Cloud Secret Manager.
+*   **Python PAA Service Hosting:**
+    *   As detailed in `docs/jules.authority.md`, a separate Python-based service will be used for scraping "People Also Ask" (PAA) data.
+    *   This service will be hosted as a distinct serverless component, for example, a dedicated **Python Cloud Function for Firebase** or a **Google Cloud Run service**.
+    *   The main Node.js backend will communicate with this service via HTTP calls.
+    *   Its specific infrastructure setup (deployment, dependencies) will be detailed in `docs/jules/shopify-app/jules.python-paa-service-setup.md`.
 
 ## 3. Stripe Configuration
 

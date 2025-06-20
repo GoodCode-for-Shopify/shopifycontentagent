@@ -147,11 +147,51 @@ Integration with Google's AI services like Gemini (via Vertex AI or Google AI St
     // }
     ```
 
-## 3. Stripe API Integration
+## 3. Internal Python PAA Service Integration
+
+*   **Purpose:** This service is used to fetch "People Also Ask" (PAA) data based on keywords from Google Search results.
+*   **Communication:**
+    *   The main Node.js Cloud Functions backend will make HTTP `POST` (or `GET`, depending on design) requests to the deployed Python PAA service endpoint (e.g., the URL of the Python Cloud Function or Cloud Run service).
+    *   Expected Request Payload:
+        ```json
+        {
+          "keywords": ["keyword1", "keyword2"],
+          "region": "US",
+          "language": "en"
+        }
+        ```
+    *   Expected Successful Response Payload:
+        ```json
+        {
+          "paa_results": {
+            "keyword1": ["Related Question 1", "Related Question 2"],
+            "keyword2": ["Related Question A"]
+          }
+        }
+        ```
+        (Or a list of questions if only one keyword is processed per call.)
+*   **Error Handling:**
+    *   The Node.js backend must handle potential errors from the Python PAA service:
+        *   Network errors (service unreachable).
+        *   Application errors from the Python service (e.g., scraper failed, no PAA data found, invalid input).
+        *   Timeout errors if the Python service takes too long.
+    *   Implement appropriate retry logic or fallback mechanisms (e.g., proceeding without PAA data, or using AI-generated questions as a backup if PAA service fails).
+*   **Authentication/Security (Internal Service):**
+    *   Even though it's an internal service, the Python PAA service endpoint must be protected.
+    *   **Recommended:** If both the Node.js backend and Python PAA service are Cloud Functions (or Cloud Run services) within the same GCP project, configure IAM invoker permissions. This allows the Node.js function's service account to securely call the Python service without exposing public endpoints or managing API keys.
+    *   Alternative: A pre-shared secret API key passed in a custom HTTP header. This is less secure than IAM.
+*   **Configuration:**
+    *   The URL of the Python PAA service endpoint should be stored in Firebase environment configuration for the Node.js functions:
+        ```bash
+        firebase functions:config:set paa_service.url="https://your-python-paa-service-endpoint"
+        ```
+    *   Access it in the Node.js backend via `functions.config().paa_service.url`.
+
+## 4. Stripe API Integration
 
 This section details how the backend Cloud Functions will interact with the Stripe API for managing subscription plans, including their corresponding Products and Prices in Stripe.
 
-### 3.1. Managing Stripe Products and Prices via API
+### 4.1. Managing Stripe Products and Prices via API
 *   **Overview:** When administrators create or update subscription plans in the admin dashboard, the backend Cloud Functions need to interact with the Stripe API to create or modify corresponding Products and Prices in Stripe.
 *   **Stripe Node.js SDK:**
     *   These operations will use the official Stripe Node.js library (`stripe`).
@@ -230,18 +270,18 @@ This section details how the backend Cloud Functions will interact with the Stri
 *   **Idempotency:** Briefly mention the concept of using idempotency keys with Stripe API requests for critical operations like creating products/prices to prevent accidental duplicates in case of network retries.
 *   **Error Handling:** Stress the importance of robust error handling for all Stripe API calls, logging errors, and providing appropriate feedback to the admin user via the API response.
 
-## 4. Rate Limiting and Queuing
+## 5. Rate Limiting and Queuing
 
 (Derived from Grok Outline Section 5.3, adapted for Firebase)
 
 Third-party APIs have rate limits. Exceeding them can lead to temporary blocking or errors.
 
-### 4.1. Rate Limiting Strategies
+### 5.1. Rate Limiting Strategies
 *   **Firestore-based Counters:** For simple API call frequency limits per tenant (e.g., X calls per minute/hour), use atomic counters in Firestore. Before an API call, check and increment the counter. Reset periodically using a scheduled function or time-based logic.
 *   **Cloud Functions Concurrency:** Be mindful of Cloud Functions' own concurrency limits. While they scale, a massive burst of requests to your functions could bottleneck if each makes a slow third-party call.
 *   **API Client Library Features:** Some client libraries offer built-in retry mechanisms with exponential backoff. Utilize these where available.
 
-### 4.2. Queuing API Calls
+### 5.2. Queuing API Calls
 For operations that are not time-sensitive or involve many API calls (e.g., batch processing, large report generation), consider queuing.
 
 *   **Firebase Task Queues (Cloud Tasks via Firebase Functions):**
@@ -265,7 +305,7 @@ For operations that are not time-sensitive or involve many API calls (e.g., batc
     *   This is more robust than simple Firestore counters for managing API call rates over time.
     *   Replaces the need for external queuing systems like BullMQ mentioned in the Grok document for many use cases within the Firebase ecosystem.
 
-### 4.3. Monitoring External API Usage
+### 5.3. Monitoring External API Usage
 *   Regularly monitor your usage of third-party APIs via their respective dashboards (Google Cloud Console for Google Ads and Google AI APIs).
 *   Set up alerts in those dashboards if available to get notified when approaching quotas.
 *   Correlate this with your internal API usage logs (stored in Firestore) to identify which tenants or features are consuming the most quota.

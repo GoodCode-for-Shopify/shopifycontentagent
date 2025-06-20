@@ -180,9 +180,10 @@ The admin dashboard will provide UIs for managing tenants, subscriptions, creden
         *   **Feature Configuration Section:**
             *   `productProcessingLimit`: (Number TextField)
             *   `keywordGenerationLimit`: (Number TextField)
-            *   `faqGeneration.enabled`: (Checkbox)
-            *   `faqGeneration.maxQuestions`: (Number TextField, conditionally visible)
+            *   `relatedQuestions.enabled`: (Polaris `Checkbox`) Label: "Enable 'Related Questions' Feature".
+            *   `relatedQuestions.maxQuestionsToRetrieve`: (Polaris `TextField` for numbers, conditionally visible based on the checkbox) Label: "Max 'Related Questions' to Retrieve (per keyword/product)".
             *   (Add other dynamic feature fields as defined in the `plans` schema in `jules.infrastructure-setup.md`)
+            *   *Note on 'Related Questions'*: Enabling this feature and setting `maxQuestionsToRetrieve` means that when this plan is active for a tenant, the backend will attempt to call the Python PAA service to fetch "People Also Ask" data, respecting the configured limit.
     *   Functionality:
         *   On submit (for create): POSTs data to `/api/admin/plans`.
         *   On submit (for edit): PUTs data to `/api/admin/plans/:planId`.
@@ -205,7 +206,7 @@ The admin dashboard will provide UIs for managing tenants, subscriptions, creden
     *   Display billing history (if Stripe API provides this easily and backend exposes it).
     *   Apply/view discount codes (if admin has this capability).
 
-### 3.3. Credential Management UI (Status & Actions)
+### 3.4. Credential Management UI (Status & Actions)
 *   Typically on the **Shop Details Page**.
 *   **Functionality:**
     *   **Display Status:** Show which credential types are configured for the tenant (e.g., "Google Ads Refresh Token: Present", "Gemini AI API Key: Not Set"). **Do NOT display the actual encrypted credentials.**

@@ -16,6 +16,12 @@ The following technologies have been selected and are considered authoritative f
     *   **Framework:** Express.js
     *   **Hosting Environment:** Cloud Functions for Firebase (2nd Generation preferred)
     *   **API Structure:** RESTful APIs
+    *   **Python PAA Service:**
+        *   Purpose: Scrapes "People Also Ask" (PAA) data from Google Search results.
+        *   Language: Python (utilizing the `people-also-ask` library or similar).
+        *   Hosting: Deployed as a separate serverless component (e.g., dedicated Python Cloud Function for Firebase, or Google Cloud Run service).
+        *   Communication: Accessed via HTTP requests from the primary Node.js Cloud Functions backend.
+        *   Note: This component relies on web scraping and carries inherent risks associated with changes in Google's SERP structure and Terms of Service regarding automated querying.
 
 *   **Database:**
     *   **Type:** NoSQL Document Database
@@ -53,6 +59,10 @@ The following technologies have been selected and are considered authoritative f
     *   These dynamic plan configurations will be stored in Firestore.
     *   The backend (Cloud Functions) must integrate with the Stripe API (specifically Stripe Products and Prices APIs) to create, update, or archive corresponding product/price entities in Stripe whenever plans are managed in the admin dashboard.
     *   The end-user Shopify app will read these dynamic plan features from Firestore (via backend APIs) to adjust its functionality and enforce limits accordingly.
+*   **PAA Data Sourcing Strategy:**
+    *   "People Also Ask" (PAA) data will be sourced via a custom-built Python service that scrapes Google Search results.
+    *   Rationale: This approach is chosen for greater control over the data extraction process and potential cost savings compared to paid third-party PAA APIs.
+    *   Acknowledged Risks: This strategy carries inherent risks due to reliance on web scraping, which may be impacted by changes in Google's SERP structure or Terms of Service regarding automated querying. The stability of this data source must be monitored.
 *   **API Usage Tracking:**
     *   The system must track API usage for different tenants, especially if developer-provided credentials or usage quotas are involved. This will likely involve Firestore for logging usage counts against `shop_id` and API type.
 *   **Modularity and Reusability:** Backend services built for the admin dashboard should be reusable for the end-user Shopify app where applicable.
