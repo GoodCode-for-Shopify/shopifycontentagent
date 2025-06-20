@@ -163,8 +163,40 @@ The admin dashboard will provide UIs for managing tenants, subscriptions, creden
         *   Potentially trigger actions like "Request Re-authentication" for a credential, which would involve backend logic.
         *   View API usage logs/summary for the shop.
 
-### 3.2. Subscription Management UI
-*   Integrated into the **Shop Details Page** or a separate section.
+### 3.2. Plan Configuration Interface
+*   **Overview:** This interface allows admins to create, view, edit, and archive subscription plans, with changes reflected in both Firestore and Stripe (via backend API calls).
+*   **Plan List Page:**
+    *   UI: A Shopify Polaris `Page` with a `Card` containing a `DataTable` or `ResourceList`.
+    *   Columns/Items: Plan Name, Price, Status (Active/Archived), Number of active subscribers (optional, might require extra backend logic to count), Actions (Edit, Archive).
+    *   Functionality: Fetches and displays all plans from `/api/admin/plans`. A "Create New Plan" button navigates to the plan creation form.
+*   **Plan Creation/Edit Form Page:**
+    *   UI: A Shopify Polaris `Page` with a `Form` component and various `FormLayout` groups for input fields.
+    *   Input Fields (using Polaris `TextField`, `Select`, `Checkbox`, `RangeSlider` or custom components for numeric inputs):
+        *   `planName`: (String)
+        *   `description`: (String, multiline)
+        *   `price`: (Number, input for amount in major currency unit, backend converts to cents)
+        *   `currency`: (Select, e.g., USD, EUR)
+        *   `status`: (Select: Active, Archived) - Might be "Active" by default on create, and only editable to "Archived" on edit.
+        *   **Feature Configuration Section:**
+            *   `productProcessingLimit`: (Number TextField)
+            *   `keywordGenerationLimit`: (Number TextField)
+            *   `faqGeneration.enabled`: (Checkbox)
+            *   `faqGeneration.maxQuestions`: (Number TextField, conditionally visible)
+            *   (Add other dynamic feature fields as defined in the `plans` schema in `jules.infrastructure-setup.md`)
+    *   Functionality:
+        *   On submit (for create): POSTs data to `/api/admin/plans`.
+        *   On submit (for edit): PUTs data to `/api/admin/plans/:planId`.
+        *   Handles loading states and displays success/error messages from the API.
+        *   Navigation back to the plan list page upon successful save/cancel.
+*   **Archiving a Plan:**
+    *   Functionality: Typically an action on the Plan List Page or Edit Page.
+    *   UI: Requires a confirmation `Modal` (Polaris `Modal`) before proceeding.
+    *   Action: Calls `DELETE /api/admin/plans/:planId` (which archives the plan in backend and Stripe). Updates the list upon success.
+*   **State Management:** Briefly mention that local component state (`useState`, `useReducer`) or a more robust state management solution (React Context, Zustand, Redux) will be needed to manage form data, loading states, and API responses.
+*   **API Interaction:** Reiterate that all actions (CRUD operations for plans) involve making authenticated API calls to the backend endpoints detailed in `jules.backend-development.md`.
+
+### 3.3. Subscription Management UI
+*   Integrated into the **Shop Details Page** or a separate section. This section now refers to managing a *tenant's subscription to a plan*, not defining the plans themselves.
 *   **Functionality:**
     *   View current subscription details (plan, price, status, next billing date) fetched from your backend (which gets it from Stripe/Firestore).
     *   Allow admins to manually change a tenant's plan. This action will:
@@ -184,7 +216,7 @@ The admin dashboard will provide UIs for managing tenants, subscriptions, creden
         *   A toggle/select list for the admin to change this setting.
         *   This action calls a backend endpoint. The backend updates Firestore (`shops/{shop_id}.developerCredentialsOptIn`) and potentially triggers a Stripe subscription update if this change affects billing (e.g., moves to a different Stripe Price ID).
 
-### 3.4. API Usage Monitoring UI
+### 3.5. API Usage Monitoring UI
 *   On the **Shop Details Page** or a dedicated "API Usage" section.
 *   **Functionality:**
     *   Display API usage for a selected tenant (fetched from `/api/admin/shops/:shop_id/usage` or similar backend endpoint).
@@ -192,7 +224,7 @@ The admin dashboard will provide UIs for managing tenants, subscriptions, creden
     *   Provide charts or summaries of usage over time.
     *   Admins might have tools to view global API usage across all tenants (from `/api/admin/usage_summary`).
 
-### 3.5. Making Authenticated API Calls to Backend
+### 3.6. Making Authenticated API Calls to Backend
 *   All `fetch` or `axios` calls from the React admin dashboard to your backend API (Cloud Functions) must include the Firebase Auth ID token in the `Authorization` header.
     ```javascript
     // Example API call utility

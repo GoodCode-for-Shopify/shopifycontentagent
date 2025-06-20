@@ -47,6 +47,12 @@ The following technologies have been selected and are considered authoritative f
     *   Tenants may have the option to use their own third-party API credentials or (for paid tiers, at a higher fee) use developer-provided/managed credentials for certain APIs (e.g., Google API Key, Gemini AI API Key).
     *   Google Ads will still require tenant-specific Refresh Tokens and Customer IDs due to its OAuth nature.
     *   Billing for subscriptions and differing credential usage options will be handled via Stripe.
+*   **Dynamic Plan Management:**
+    *   The admin dashboard must allow authorized (dev team) users to dynamically create, configure, and manage subscription plans.
+    *   Configurable plan attributes include, but are not limited to: pricing, feature limits (e.g., number of products processed simultaneously, number of keywords generated per product), and inclusion/extent of specific features (e.g., number of frequently Googled questions provided per product). The Pro plan specifically should allow processing up to 5 products, while the default app processes one; this should be a configurable limit.
+    *   These dynamic plan configurations will be stored in Firestore.
+    *   The backend (Cloud Functions) must integrate with the Stripe API (specifically Stripe Products and Prices APIs) to create, update, or archive corresponding product/price entities in Stripe whenever plans are managed in the admin dashboard.
+    *   The end-user Shopify app will read these dynamic plan features from Firestore (via backend APIs) to adjust its functionality and enforce limits accordingly.
 *   **API Usage Tracking:**
     *   The system must track API usage for different tenants, especially if developer-provided credentials or usage quotas are involved. This will likely involve Firestore for logging usage counts against `shop_id` and API type.
 *   **Modularity and Reusability:** Backend services built for the admin dashboard should be reusable for the end-user Shopify app where applicable.

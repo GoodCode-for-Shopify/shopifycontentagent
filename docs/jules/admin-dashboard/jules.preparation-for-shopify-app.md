@@ -55,9 +55,17 @@ A significant advantage of building the admin dashboard and its backend first is
 The Shopify app's UI and functionality will need to adapt based on the tenant's current subscription plan.
 
 *   **Plan-Based Feature Access:**
-    *   The frontend will fetch the tenant's current plan details from your backend (which reads it from Firestore).
-    *   Based on the plan (e.g., "free", "basic", "pro"), the UI will enable/disable or hide/show certain features or sections.
-    *   For example, a "Free Plan" user might see a disabled "Advanced Reporting" button with a prompt to upgrade.
+    *   The Shopify app's UI and functionality must dynamically adapt based on the tenant's current subscription plan and its specific, admin-configured features.
+    *   **Fetching Dynamic Plan Configuration:** When a user interacts with the Shopify app, the frontend will make a request to your backend (Cloud Functions). This backend service will:
+        1.  Identify the tenant's `shop_id`.
+        2.  Retrieve the tenant's current `planId` from their `shops/{shop_id}` document in Firestore.
+        3.  Fetch the detailed configuration for that `planId` from the `plans` collection in Firestore. This includes dynamically set attributes like `productProcessingLimit`, `keywordGenerationLimit`, `faqGeneration.enabled`, `faqGeneration.maxQuestions`, etc.
+    *   **Controlling Frontend UI/UX:** The backend will return these specific plan feature values to the Shopify app frontend. The React/Polaris frontend will then use this information to:
+        *   Enable or disable specific UI elements or entire sections.
+        *   Adjust behavior, for example, limiting the number of items a user can select for processing based on `productProcessingLimit` (e.g., 1 for a basic dynamic plan, up to 5 for a pro dynamic plan).
+        *   Display accurate information about usage limits or feature availability.
+        *   Provide clear prompts to upgrade if a user attempts an action exceeding their current plan's dynamic limits.
+    *   **Enforcing Limits on Backend:** Crucially, while the frontend adapts the UI, the backend Cloud Functions must also re-fetch and verify these dynamic plan limits before executing any resource-intensive or quota-limited operations (e.g., processing products, calling third-party AI services). This prevents users from bypassing frontend restrictions.
 *   **Upgrade Prompts & Stripe Checkout:**
     *   Implement clear calls to action (CTAs) within the Shopify app for users to upgrade their plan.
     *   Clicking an "Upgrade" button should ideally initiate a Stripe Checkout session. This is typically done by:

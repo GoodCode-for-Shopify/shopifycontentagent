@@ -28,16 +28,29 @@ While `docs/jules/serverside-setup.md` covers the basic `shops` collection for c
         *   `status`: (String) e.g., "active", "uninstalled", "frozen".
         *   `developerCredentialsOptIn`: (Map, optional) e.g., `{ gemini_ai: true, google_api_key: false }` indicating which developer-provided keys the tenant is using (and potentially being billed extra for).
 
-*   **`plans` Collection (or hardcoded in config if few and static):**
-    *   Document ID: Plan identifier (e.g., "free", "basic", "pro", "basic_dev_keys", "pro_dev_keys").
+*   **`plans` Collection:**
+    *   Document ID: Auto-generated unique ID (or a human-readable slug like "pro-tier-q1-2024" if admins create these manually and slugs can be enforced as unique).
     *   Fields:
-        *   `name`: (String) User-friendly plan name (e.g., "Free Tier", "Basic Plan + Dev Keys").
-        *   `price`: (Number) Monthly price in USD.
-        *   `currency`: (String) e.g., "USD".
-        *   `apiQuota`: (Map) e.g., `{ googleAds: 1000, geminiAI: 500 }`.
-        *   `features`: (Array of Strings) List of features included.
-        *   `stripePriceId`: (String) Corresponding Price ID in Stripe.
-        *   `usesDeveloperCredentials`: (Boolean or Map) Indicates if this plan inherently includes developer credentials, or which ones.
+        *   `planName`: (String) User-friendly plan name (e.g., "Pro Tier", "Basic Monthly").
+        *   `description`: (String, optional) Detailed description of the plan and its features.
+        *   `price`: (Number) Monthly price in the smallest currency unit (e.g., cents for USD).
+        *   `currency`: (String) ISO currency code (e.g., "USD", "EUR").
+        *   `stripeProductId`: (String) Corresponding Product ID in Stripe (created via API).
+        *   `stripePriceId`: (String) Corresponding Price ID in Stripe for the current price (created via API).
+        *   `status`: (String) e.g., "active" (available for new subscriptions), "archived" (not available for new subscriptions, existing subscriptions may continue or be migrated), "draft".
+        *   `isEditableByAdmin`: (Boolean) `true` if this plan was created by an admin and can be modified/archived; `false` for legacy or system-defined uneditable plans (if any).
+        *   `createdAt`: (Timestamp) Creation date of the plan record.
+        *   `updatedAt`: (Timestamp) Last modification date of the plan record.
+        *   **`features` (Map):** Contains various configurable feature limits and flags for the plan.
+            *   `productProcessingLimit`: (Number) Max number of products that can be processed simultaneously (e.g., 1 for Free/Basic, 5 for Pro).
+            *   `keywordGenerationLimit`: (Number) Max number of keywords generated per product.
+            *   `faqGeneration`: (Map)
+                *   `enabled`: (Boolean) Whether FAQ generation is included.
+                *   `maxQuestions`: (Number) Max number of FAQ questions generated per product.
+            *   `apiCallLimit`: (Number, optional) Overall API call limit for a specific period for this plan, if applicable beyond individual feature limits.
+            *   `usesDeveloperCredentials`: (Map, optional) e.g., `{ gemini_ai: true, google_api_key: false }` indicating if this plan inherently uses developer-provided keys for certain services. This might influence the Stripe Price ID selected or created.
+            *   `customBooleanFeatureFlag1`: (Boolean, example) For future feature toggles.
+            *   `customNumericFeatureValue1`: (Number, example) For future configurable numeric values.
 
 *   **`subscriptions` Collection (if tracking more details than just `planId` on shop):**
     *   Document ID: Auto-generated or `shop_id` (if one subscription per shop).

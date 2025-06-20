@@ -147,18 +147,101 @@ Integration with Google's AI services like Gemini (via Vertex AI or Google AI St
     // }
     ```
 
-## 3. Rate Limiting and Queuing
+## 3. Stripe API Integration
+
+This section details how the backend Cloud Functions will interact with the Stripe API for managing subscription plans, including their corresponding Products and Prices in Stripe.
+
+### 3.1. Managing Stripe Products and Prices via API
+*   **Overview:** When administrators create or update subscription plans in the admin dashboard, the backend Cloud Functions need to interact with the Stripe API to create or modify corresponding Products and Prices in Stripe.
+*   **Stripe Node.js SDK:**
+    *   These operations will use the official Stripe Node.js library (`stripe`).
+    *   Remind that the Stripe secret key must be initialized securely (e.g., `const stripe = require('stripe')('sk_live_YOUR_STRIPE_SECRET_KEY_FROM_ENV');`).
+*   **Creating a Stripe Product:**
+    *   When a new plan is created in the admin dashboard:
+    *   A new Product should be created in Stripe.
+    *   Example Stripe SDK usage:
+        ```javascript
+        // async function createStripeProduct(planName, planDescription) {
+        //   const product = await stripe.products.create({
+        //     name: planName,
+        //     description: planDescription, // Optional
+        //     // type: 'service', // Default is 'service', usually appropriate
+        //   });
+        //   return product; // Contains product.id
+        // }
+        ```
+    *   The returned `product.id` should be stored in the Firestore `plans` document.
+*   **Creating a Stripe Price:**
+    *   After a Stripe Product is created (or if an existing one is used), a Price needs to be created for it.
+    *   Example Stripe SDK usage:
+        ```javascript
+        // async function createStripePrice(stripeProductId, unitAmount, currencyCode, recurringInterval = 'month') {
+        //   const price = await stripe.prices.create({
+        //     product: stripeProductId,
+        //     unit_amount: unitAmount, // Price in smallest currency unit (e.g., cents)
+        //     currency: currencyCode,  // e.g., 'usd'
+        //     recurring: {
+        //       interval: recurringInterval, // e.g., 'month', 'year'
+        //     },
+        //     // active: true, // Default is true
+        //   });
+        //   return price; // Contains price.id
+        // }
+        ```
+    *   The returned `price.id` should be stored in the Firestore `plans` document (e.g., as `stripePriceId`).
+*   **Updating a Stripe Product (e.g., name, description):**
+    *   If plan details like name or description change, the corresponding Stripe Product can be updated.
+    *   Example Stripe SDK usage:
+        ```javascript
+        // async function updateStripeProduct(stripeProductId, newName, newDescription) {
+        //   const product = await stripe.products.update(stripeProductId, {
+        //     name: newName,
+        //     description: newDescription,
+        //   });
+        //   return product;
+        // }
+        ```
+*   **Updating/Archiving Stripe Prices (Handling Plan Price Changes):**
+    *   Reiterate the point from `jules.backend-development.md`: Stripe Prices are generally immutable regarding `unit_amount`, `currency`, and `recurring` interval.
+    *   If a plan's price changes:
+        1.  The old Stripe Price associated with the plan should be archived (made inactive).
+            ```javascript
+            // async function archiveStripePrice(stripePriceId) {
+            //   const price = await stripe.prices.update(stripePriceId, {
+            //     active: false,
+            //   });
+            //   return price;
+            // }
+            ```
+        2.  A new Stripe Price must be created (as shown above) linked to the *same Stripe Product ID* (if the product itself hasn't changed).
+        3.  The Firestore `plans` document must be updated with the new `stripePriceId`.
+*   **Archiving a Stripe Product:**
+    *   If a plan is entirely removed/archived from the admin system and will no longer be used:
+        1.  First, ensure all associated Prices are archived.
+        2.  Then, the Stripe Product itself can be archived (made inactive) or deleted if no prices are attached. Archiving is often safer.
+            ```javascript
+            // async function archiveStripeProduct(stripeProductId) {
+            //   const product = await stripe.products.update(stripeProductId, {
+            //     active: false,
+            //   });
+            //   return product;
+            // }
+            ```
+*   **Idempotency:** Briefly mention the concept of using idempotency keys with Stripe API requests for critical operations like creating products/prices to prevent accidental duplicates in case of network retries.
+*   **Error Handling:** Stress the importance of robust error handling for all Stripe API calls, logging errors, and providing appropriate feedback to the admin user via the API response.
+
+## 4. Rate Limiting and Queuing
 
 (Derived from Grok Outline Section 5.3, adapted for Firebase)
 
 Third-party APIs have rate limits. Exceeding them can lead to temporary blocking or errors.
 
-### 3.1. Rate Limiting Strategies
+### 4.1. Rate Limiting Strategies
 *   **Firestore-based Counters:** For simple API call frequency limits per tenant (e.g., X calls per minute/hour), use atomic counters in Firestore. Before an API call, check and increment the counter. Reset periodically using a scheduled function or time-based logic.
 *   **Cloud Functions Concurrency:** Be mindful of Cloud Functions' own concurrency limits. While they scale, a massive burst of requests to your functions could bottleneck if each makes a slow third-party call.
 *   **API Client Library Features:** Some client libraries offer built-in retry mechanisms with exponential backoff. Utilize these where available.
 
-### 3.2. Queuing API Calls
+### 4.2. Queuing API Calls
 For operations that are not time-sensitive or involve many API calls (e.g., batch processing, large report generation), consider queuing.
 
 *   **Firebase Task Queues (Cloud Tasks via Firebase Functions):**
@@ -182,7 +265,7 @@ For operations that are not time-sensitive or involve many API calls (e.g., batc
     *   This is more robust than simple Firestore counters for managing API call rates over time.
     *   Replaces the need for external queuing systems like BullMQ mentioned in the Grok document for many use cases within the Firebase ecosystem.
 
-### 3.3. Monitoring External API Usage
+### 4.3. Monitoring External API Usage
 *   Regularly monitor your usage of third-party APIs via their respective dashboards (Google Cloud Console for Google Ads and Google AI APIs).
 *   Set up alerts in those dashboards if available to get notified when approaching quotas.
 *   Correlate this with your internal API usage logs (stored in Firestore) to identify which tenants or features are consuming the most quota.

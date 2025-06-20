@@ -103,6 +103,181 @@ app.use(express.json());
 const adminApi = express.Router();
 adminApi.use(adminAuthMiddleware); // Protect all routes under /admin
 
+// **Plan Management APIs**
+// The Stripe SDK for Node.js (npm install stripe) would be initialized with your Stripe secret key.
+// const stripe = require('stripe')(functions.config().stripe.secret_key);
+
+adminApi.post('/plans', async (req, res) => {
+  // Purpose: Create a new subscription plan.
+  // Request Body: Contains all configurable plan attributes (planName, description, price, currency, feature configurations).
+  try {
+    // 1. Validate incoming plan data (ensure all required fields are present, types are correct, etc.)
+    const { planName, description, price, currency, features } = req.body;
+    if (!planName || !price || !currency || !features) {
+      return res.status(400).send("Missing required plan attributes.");
+    }
+
+    // 2. Create a new Product in Stripe
+    // const product = await stripe.products.create({ name: planName, description: description });
+    const stripeProductId = "prod_mock_" + Date.now(); // Mock Stripe Product ID
+
+    // 3. Create a new Price in Stripe associated with the Product ID
+    // const stripePrice = await stripe.prices.create({
+    //   unit_amount: price, // Price in smallest currency unit (e.g., cents)
+    //   currency: currency,
+    //   recurring: { interval: 'month' },
+    //   product: product.id,
+    // });
+    const stripePriceId = "price_mock_" + Date.now(); // Mock Stripe Price ID
+
+    // 4. Save the complete plan configuration to Firestore
+    const newPlanRef = admin.firestore().collection('plans').doc();
+    const newPlan = {
+      id: newPlanRef.id,
+      planName,
+      description,
+      price, // Store price in smallest currency unit
+      currency,
+      features, // e.g., { productProcessingLimit: 5, keywordGenerationLimit: 100, faqGeneration: { enabled: true, maxQuestions: 5 } }
+      stripeProductId: stripeProductId,
+      stripePriceId: stripePriceId,
+      status: 'active', // Default status
+      isEditableByAdmin: true,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    await newPlanRef.set(newPlan);
+
+    // 5. Return the newly created plan object
+    res.status(201).json(newPlan);
+  } catch (error) {
+    console.error("Error creating plan:", error);
+    // Handle Stripe API errors specifically if possible (e.g., error.type === 'StripeCardError')
+    res.status(500).send("Failed to create plan.");
+  }
+});
+
+adminApi.get('/plans', async (req, res) => {
+  // Purpose: Retrieve a list of all subscription plans.
+  try {
+    const snapshot = await admin.firestore().collection('plans').orderBy('createdAt', 'desc').get();
+    const plans = snapshot.docs.map(doc => doc.data());
+    res.status(200).json(plans);
+  } catch (error) {
+    console.error("Error fetching plans:", error);
+    res.status(500).send("Failed to fetch plans.");
+  }
+});
+
+adminApi.get('/plans/:planId', async (req, res) => {
+  // Purpose: Retrieve details of a specific subscription plan.
+  try {
+    const { planId } = req.params;
+    const planRef = admin.firestore().collection('plans').doc(planId);
+    const doc = await planRef.get();
+    if (!doc.exists) {
+      return res.status(404).send("Plan not found.");
+    }
+    res.status(200).json(doc.data());
+  } catch (error) {
+    console.error("Error fetching plan:", error);
+    res.status(500).send("Failed to fetch plan.");
+  }
+});
+
+adminApi.put('/plans/:planId', async (req, res) => {
+  // Purpose: Update an existing subscription plan.
+  // Request Body: Contains the plan attributes to be updated.
+  try {
+    const { planId } = req.params;
+    const updates = req.body; // e.g., { description, price, currency, features, status }
+
+    // 1. Validate incoming data
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).send("No update data provided.");
+    }
+
+    const planRef = admin.firestore().collection('plans').doc(planId);
+    const planDoc = await planRef.get();
+    if (!planDoc.exists) {
+      return res.status(404).send("Plan not found.");
+    }
+    const existingPlan = planDoc.data();
+
+    // 2. Stripe Price Handling
+    let newStripePriceId = existingPlan.stripePriceId;
+    if (updates.price && (updates.price !== existingPlan.price || (updates.currency && updates.currency !== existingPlan.currency))) {
+      // Price or currency changed, archive old Stripe price and create a new one.
+      // await stripe.prices.update(existingPlan.stripePriceId, { active: false });
+      // const newStripePrice = await stripe.prices.create({
+      //   unit_amount: updates.price || existingPlan.price,
+      //   currency: updates.currency || existingPlan.currency,
+      //   recurring: { interval: 'month' },
+      //   product: existingPlan.stripeProductId,
+      // });
+      // newStripePriceId = newStripePrice.id;
+      newStripePriceId = "price_mock_updated_" + Date.now(); // Mock updated Stripe Price ID
+      console.log(`Mock: Archived old price ${existingPlan.stripePriceId}, created new price ${newStripePriceId}`);
+    }
+
+    // Update Stripe Product if name/description changes (optional, Stripe Product can often be generic)
+    // if (updates.planName || updates.description) {
+    //   await stripe.products.update(existingPlan.stripeProductId, {
+    //     name: updates.planName || existingPlan.planName,
+    //     description: updates.description || existingPlan.description,
+    //   });
+    // }
+
+    // 3. Update the plan document in Firestore
+    const finalUpdates = {
+      ...updates,
+      stripePriceId: newStripePriceId, // Use new price ID if changed
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    await planRef.update(finalUpdates);
+
+    // Note: Implications for existing subscribers are not handled here. Updates apply to new subscriptions.
+    res.status(200).json({ id: planId, ...finalUpdates });
+  } catch (error) {
+    console.error("Error updating plan:", error);
+    res.status(500).send("Failed to update plan.");
+  }
+});
+
+adminApi.delete('/plans/:planId', async (req, res) => {
+  // Purpose: "Archive" or effectively delete a plan.
+  try {
+    const { planId } = req.params;
+    const planRef = admin.firestore().collection('plans').doc(planId);
+    const planDoc = await planRef.get();
+
+    if (!planDoc.exists) {
+      return res.status(404).send("Plan not found.");
+    }
+    const planData = planDoc.data();
+
+    // 1. Mark plan as "archived" in Firestore
+    await planRef.update({
+      status: 'archived',
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    // 2. Archive the corresponding Price in Stripe
+    // await stripe.prices.update(planData.stripePriceId, { active: false });
+    console.log(`Mock: Archived Stripe Price ${planData.stripePriceId}`);
+
+    // Optionally, archive Stripe Product if no other active prices exist for it.
+    // This requires checking other plans or having a more complex logic.
+    // For now, we just archive the price.
+
+    res.status(200).send({ message: `Plan ${planId} archived successfully.` });
+  } catch (error) {
+    console.error("Error archiving plan:", error);
+    res.status(500).send("Failed to archive plan.");
+  }
+});
+
+
 // Example: Tenant (Shop) Management
 adminApi.get('/shops', async (req, res) => {
   try {
