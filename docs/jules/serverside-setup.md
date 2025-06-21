@@ -1119,6 +1119,13 @@ Once you have developed and tested your Firebase Functions and frontend, you nee
 
 Regularly deploy updates and ensure your deployment process is smooth and repeatable. Consider setting up CI/CD (Continuous Integration/Continuous Deployment) using tools like GitHub Actions, Google Cloud Build, or others for automated builds and deployments.
 
+### Custom Domain for Production API
+For the production environment, the API backend (Cloud Functions) will be accessible via a custom domain, such as `api.shopifycontentagent.by.goodcode.ca`.
+
+This is typically achieved by using Firebase Hosting rewrites to map this custom domain (which is first connected to Firebase Hosting for the production Firebase project) to the main API Cloud Function (e.g., the 'api' function that hosts the Express app).
+
+Refer to `docs/jules/environments-and-cicd-strategy.md` for the overall custom domain strategy across all environments (dev, staging, production), including how different domains are mapped to their respective Firebase projects. Specific environment configurations, like which function URL the production domain maps to, are managed as part of the CI/CD deployment process for the production environment.
+
 ## Frontend Setup (React/Polaris) - Brief Overview
 
 While this document focuses on the server-side and database setup, here's a brief overview of how the frontend (React with Shopify Polaris) will interact with the backend:

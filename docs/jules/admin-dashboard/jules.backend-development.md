@@ -301,13 +301,106 @@ adminApi.put('/shops/:shop_id', async (req, res) => { /* ... update shop details
 // Admins might "activate" or "manage" existing shops.
 
 // Subscription Management (interacting with Stripe & Firestore)
+// Note: The following endpoint is for admins to manage existing subscriptions.
+// The creation of a checkout session for a new subscription is typically initiated by the Shopify app user.
 adminApi.post('/shops/:shop_id/subscriptions', async (req, res) => {
   // const { shop_id } = req.params;
-  // const { stripePriceId, couponId } = req.body;
+  // const { stripePriceId, couponId } = req.body; // couponId here would be a Stripe Coupon ID
   // Logic to create/update Stripe subscription and store details in Firestore
   // Ensure you have stripeCustomerId for the shop from Firestore.
 });
 adminApi.get('/shops/:shop_id/subscriptions', async (req, res) => { /* ... get subscription details ... */ });
+
+
+// --- Shopify App User API Routes (Example for Checkout Session) ---
+// This route would be called by the Shopify app frontend during onboarding/plan selection.
+// It should be protected by Shopify session token middleware, not adminAuthMiddleware.
+// For simplicity, Shopify session token middleware is not shown here but is assumed.
+app.post('/api/subscriptions/create-checkout-session', async (req, res) => {
+  // Purpose: Create a Stripe Checkout session for a new subscription.
+  // Request Body: { planId: "pro_plan_id", shop_id: "verified_shop_id", discount_code: "SUMMER20" (optional string) }
+  // `shop_id` would come from verified Shopify session token.
+  try {
+    const { planId, discount_code, shop_id } = req.body;
+
+    if (!planId || !shop_id) {
+      return res.status(400).send("Missing required parameters: planId and shop_id.");
+    }
+
+    // 1. Fetch plan details from Firestore to get stripePriceId
+    const planRef = admin.firestore().collection('plans').doc(planId);
+    const planDoc = await planRef.get();
+    if (!planDoc.exists || planDoc.data().status !== 'active') {
+      return res.status(404).send("Active plan not found or plan is not active.");
+    }
+    const stripePriceId = planDoc.data().stripePriceId;
+
+    // 2. Retrieve or create Stripe Customer ID for the shop_id
+    // (Logic to get stripeCustomerId from `shops/{shop_id}` in Firestore)
+    const shopDoc = await admin.firestore().collection('shops').doc(shop_id).get();
+    if (!shopDoc.exists) {
+        return res.status(404).send("Shop not found.");
+    }
+    let stripeCustomerId = shopDoc.data().stripeCustomerId;
+    if (!stripeCustomerId) {
+        // const customer = await stripe.customers.create({
+        //   email: shopDoc.data().contactEmail, // Or Shopify store email
+        //   name: shopDoc.data().shopName,
+        //   metadata: { shop_id: shop_id }
+        // });
+        // stripeCustomerId = customer.id;
+        // await admin.firestore().collection('shops').doc(shop_id).update({ stripeCustomerId });
+        stripeCustomerId = "cus_mock_" + Date.now(); // Mock customer ID
+        console.log("Mock: Created Stripe customer " + stripeCustomerId);
+    }
+
+    // 3. Create Stripe Checkout Session
+    let checkoutSessionParams = {
+      payment_method_types: ['card'],
+      line_items: [{ price: stripePriceId, quantity: 1 }],
+      mode: 'subscription',
+      customer: stripeCustomerId,
+      success_url: `https://YOUR_APP_URL/onboarding/payment-success?session_id={CHECKOUT_SESSION_ID}`, // Replace with actual success URL
+      cancel_url: `https://YOUR_APP_URL/onboarding/select-plan?payment_cancelled=true`,    // Replace with actual cancel URL
+      metadata: { shop_id: shop_id, planId: planId },
+    };
+
+    // Handle discount code
+    if (discount_code) {
+      // Recommended V1 approach: Let Stripe's Checkout page handle promotion code validation.
+      checkoutSessionParams.allow_promotion_codes = true;
+      // If you wanted to apply a specific coupon/promotion code ID directly (after validating the user-entered code
+      // and fetching its ID from Stripe API):
+      // const promotionCodes = await stripe.promotionCodes.list({ code: discount_code, active: true, limit: 1 });
+      // if (promotionCodes.data.length > 0) {
+      //    checkoutSessionParams.discounts = [{ promotion_code: promotionCodes.data[0].id }];
+      // } else {
+      //    // Optionally handle invalid code from user here, or let Stripe handle it if allow_promotion_codes = true
+      //    console.warn(`User entered discount code "${discount_code}" not found or inactive in Stripe.`);
+      // }
+    }
+
+    // const session = await stripe.checkout.sessions.create(checkoutSessionParams);
+    const mockSessionId = "cs_test_mock_" + Date.now(); // Mock session ID
+
+    res.status(200).json({ sessionId: mockSessionId /* session.id */ });
+
+  } catch (error) {
+    console.error("Error creating Stripe Checkout session:", error);
+    // If Stripe API call fails due to invalid coupon/promotion code in `discounts` array
+    if (error.type === 'StripeInvalidRequestError' && error.code === 'resource_missing' && error.param === 'discounts[0][promotion_code]') {
+        return res.status(400).json({
+            error: {
+                code: "INVALID_DISCOUNT_CODE",
+                message: "The provided discount code is invalid or expired."
+            }
+        });
+    }
+    // Generic error based on your global error handling strategy
+    res.status(500).send("Failed to create Stripe Checkout session.");
+  }
+});
+
 
 // Credential Management (viewing status/type, not exposing encrypted values directly)
 adminApi.get('/shops/:shop_id/credentials', async (req, res) => {

@@ -36,20 +36,58 @@ All backend API endpoints (Express routes within Cloud Functions) serving the ad
     *   All incoming data from the admin dashboard to API endpoints (request bodies, query parameters, URL parameters) must be validated on the server-side.
     *   Use libraries like `express-validator` or manual checks to ensure data types, formats, lengths, and ranges are as expected before processing. This helps prevent injection attacks and unexpected errors.
 *   **CORS (Cross-Origin Resource Sharing):**
-    *   Configure CORS on your main Express app in Cloud Functions appropriately. For the admin dashboard (if served from a different Firebase Hosting URL than the functions, or during local development), you'll need to allow requests from the dashboard's origin.
+    *   The Cloud Functions backend must be configured with a specific list of allowed origins to prevent unauthorized cross-origin requests. This list should accommodate all frontend environments and Shopify domains.
+    *   **Allowed Origins should include:**
+        *   Production Admin Dashboard: `https://shopifycontentagent.com` (and/or `https://admin.shopifycontentagent.com`).
+        *   Staging Admin Dashboard: `https://staging.shopifycontentagent.com` (and/or `https://admin-staging.shopifycontentagent.com`).
+        *   Development Admin Dashboard: `https://dev.shopifycontentagent.com` (and/or `https://admin-dev.shopifycontentagent.com`), and development localhost URLs (e.g., `http://localhost:3000`, `http://localhost:3001`).
+        *   Production Shopify App Frontend: e.g., `https://app.shopifycontentagent.com` (or the root `https://shopifycontentagent.com` if served from a path).
+        *   Staging Shopify App Frontend: e.g., `https://app-staging.shopifycontentagent.com`.
+        *   Development Shopify App Frontend: e.g., `https://app-dev.shopifycontentagent.com`, and `localhost` variants for ngrok/Shopify CLI tunnels.
+        *   Shopify Admin Domains: `https://*.myshopify.com` and `https://admin.shopify.com` (crucial for embedded app functionality).
+    *   **Conceptual `cors` middleware options in Express:**
         ```javascript
-        // In functions/src/index.js
+        // In functions/src/index.js (or a dedicated corsConfig.js)
         // const cors = require('cors');
-        // const allowedOrigins = ['https://your-admin-dashboard-domain.web.app', 'http://localhost:3000']; // Add your local dev URL
-        // app.use(cors({ origin: function (origin, callback) {
-        //   if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-        //     callback(null, true);
-        //   } else {
-        //     callback(new Error('Not allowed by CORS'));
-        //   }
-        // }}));
+
+        // Define base domains from environment variables for flexibility
+        // const PROD_ADMIN_DOMAIN = process.env.PROD_ADMIN_DOMAIN || 'https://shopifycontentagent.com';
+        // const STAGING_ADMIN_DOMAIN = process.env.STAGING_ADMIN_DOMAIN || 'https://staging.shopifycontentagent.com';
+        // const DEV_ADMIN_DOMAIN = process.env.DEV_ADMIN_DOMAIN || 'https://dev.shopifycontentagent.com';
+        // const PROD_APP_DOMAIN = process.env.PROD_APP_DOMAIN || 'https://app.shopifycontentagent.com';
+        // ... and so on for other staging/dev app domains
+
+        // const allowedOrigins = [
+        //   PROD_ADMIN_DOMAIN,
+        //   STAGING_ADMIN_DOMAIN,
+        //   DEV_ADMIN_DOMAIN,
+        //   PROD_APP_DOMAIN,
+        //   // Add other staging/dev app domains and specific localhost ports used in development:
+        //   'http://localhost:3000', // Common React dev port for Admin UI
+        //   'http://localhost:3001', // Common React dev port for Shopify App UI (example)
+        //   // RegExp for Shopify admin domains:
+        //   /^https:\/\/[a-zA-Z0-9-]+\.myshopify\.com$/,
+        //   /^https:\/\/admin\.shopify\.com$/
+        // ];
+
+        // app.use(cors({
+        //   origin: function (origin, callback) {
+        //     // Allow requests with no origin (like mobile apps or curl requests)
+        //     if (!origin) return callback(null, true);
+
+        //     if (allowedOrigins.some(o => typeof o === 'string' ? o === origin : o.test(origin))) {
+        //       callback(null, true);
+        //     } else {
+        //       console.warn(`CORS: Origin ${origin} not allowed.`);
+        //       callback(new Error('Not allowed by CORS'));
+        //     }
+        //   },
+        //   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Specify allowed methods
+        //   allowedHeaders: ['Authorization', 'Content-Type'], // Specify allowed headers
+        //   credentials: true // If you need to handle cookies or authorization headers
+        // }));
         ```
-        If using Firebase Hosting rewrites to serve the API under the same domain as the admin dashboard frontend, CORS configuration might be simpler (`app.use(cors({ origin: true }))` might suffice for same-origin requests).
+    *   **Management:** The list of allowed origins should ideally be managed via environment configuration (e.g., Firebase function config, Google Secret Manager) to allow flexibility between deployed environments (dev, staging, prod) without code changes, especially if the exact domain list varies. However, for a core set of domains as listed, they can be part of the code if they are stable. The RegExp for Shopify domains is generally stable.
 *   **HTTPS:**
     *   All communication between the admin dashboard frontend and backend Cloud Functions will be over HTTPS by default (provided by Firebase Hosting and Cloud Functions).
 

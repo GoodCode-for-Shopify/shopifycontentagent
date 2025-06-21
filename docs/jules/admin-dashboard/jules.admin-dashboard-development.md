@@ -196,6 +196,25 @@ The admin dashboard will provide UIs for managing tenants, subscriptions, creden
 *   **State Management:** Briefly mention that local component state (`useState`, `useReducer`) or a more robust state management solution (React Context, Zustand, Redux) will be needed to manage form data, loading states, and API responses.
 *   **API Interaction:** Reiterate that all actions (CRUD operations for plans) involve making authenticated API calls to the backend endpoints detailed in `jules.backend-development.md`.
 
+### 3.2.1. Promotions & Discount Code Awareness (Conceptual)
+
+*   **Purpose:** While discount codes (Coupons/Promotion Codes) are primarily created and managed directly in the Stripe Dashboard (as per `docs/jules/admin-dashboard/jules.infrastructure-setup.md`), the admin dashboard can provide awareness of these codes for internal tracking, marketing reference, and support purposes.
+*   **UI (Conceptual):**
+    *   A simple view, potentially on a dedicated "Promotions" page or a `Card` within a relevant settings area.
+    *   It might feature a Polaris `ResourceList` or `DataTable` to list significant or commonly used discount codes.
+    *   **Data Source (V1 - Manual/Internal Note-Keeping):**
+        *   For V1, this list would **not** be populated by direct, real-time Stripe API calls from the admin frontend to fetch *all* coupons (which can be extensive and paginated).
+        *   Instead, it could be a manually curated list. Admins could copy-paste important active codes from Stripe into a simple internal note-keeping feature or a basic CRUD interface within this section of the admin dashboard (e.g., fields for Code, Discount Info, Notes). This data would be stored in a simple Firestore collection accessible only to admins.
+    *   **Data Source (V2 - Future Enhancement):**
+        *   A backend function could periodically fetch a curated subset of active coupon/promotion code data from Stripe (e.g., those with specific metadata or recent activity) and cache it in Firestore for display in this admin panel section. This would be more complex due to Stripe API pagination, data volume considerations, and caching logic.
+    *   **Displayed Information (for V1 manual list example):**
+        *   `Code`: e.g., "SUMMER2024"
+        *   `Discount Info`: e.g., "20% off for 3 months"
+        *   `Internal Note`: e.g., "Summer campaign, expires Sept 1st"
+        *   `Status`: (Manually set, e.g., Active, Expired)
+    *   **Link to Stripe:** A prominent link or button: "Manage All Discount Codes in Stripe Dashboard" which redirects the admin to the appropriate section in their Stripe account.
+*   **No Create/Edit via Admin UI (V1):** It's important to reiterate that for V1, there is **no functionality to create, edit, or manage the lifecycle of discount codes directly from this Content Agent admin dashboard**. All such management tasks are performed in the Stripe Dashboard. This section is for awareness and internal reference only.
+
 ### 3.3. Subscription Management UI
 *   Integrated into the **Shop Details Page** or a separate section. This section now refers to managing a *tenant's subscription to a plan*, not defining the plans themselves.
 *   **Functionality:**
