@@ -1,90 +1,85 @@
-# Content Agent Shopify App: Core Article Generation Flow
+# Content Agent Shopify App: Core Article Generation Flow (Initial Batch Steps)
 
-This document details the core multi-step process within the "Content Agent" Shopify app that users interact with to generate SEO-enhanced blog articles. It covers both the frontend UI (React/Polaris) aspects and the corresponding backend Cloud Function interactions for each step.
+This document details the initial core steps within the "Content Agent" Shopify app that users interact with to initiate the generation of SEO-enhanced blog articles. It covers the frontend UI (React/Polaris) aspects and the corresponding backend Cloud Function interactions for these initial phases, which can apply to a single item or a batch of items (e.g., multiple products or topics) depending on the user's plan.
 
-## Overview of the Multi-Step Form
+This flow leads up to the generation of multiple article outlines, which are then managed and processed individually from an "Article Workspace."
 
-The primary user interaction for creating articles is a multi-step form. The number of steps and available options within each step can vary based on the user's subscription plan.
+## Overview of the Initial Multi-Step Process
 
-## Step 1: Product Selection
+The primary user interaction for initiating article creation is a multi-step process. The number of steps and available options within each step can vary based on the user's subscription plan. These initial steps are designed to gather the necessary inputs for a batch of articles.
 
-*   **Purpose:** User selects the Shopify product(s) that the article(s) will be based on.
+## Step 1: Product/Topic Selection
+
+*   **Purpose:** User selects the Shopify product(s) or defines the topics that the articles will be based on.
 *   **UI (React/Polaris):**
-    *   A Polaris `Autocomplete` component for an instant-suggestion search field. Users start typing a product name.
-    *   The app fetches matching products from the user's Shopify store via a backend call.
-    *   **Single Product Plans (e.g., Free, Basic):** User selects one product.
-    *   **Multi-Product Plans (e.g., Pro, Enterprise):**
-        *   The UI allows selecting multiple products, often displayed like tags below the search field. Each selected product tag can be removed.
-        *   A "Clear All" button appears if multiple products are selected (e.g., >3).
-        *   **Category Selection:** A `Select` list or similar UI to choose a Shopify product category. If selected, the app fetches all products in that category. If the count is within the plan's `productProcessingLimit`, the user can add them all.
-        *   **"All Products" Selection:** An option to select all products in the store, enabled only if the total product count is within the plan's `productProcessingLimit`.
-*   **Backend Interaction (Cloud Function - e.g., `POST /api/shopify/products/search`):**
-    *   Receives: Search query (for autocomplete), category ID (for category selection), or a flag for "all products". `shop_id` from verified session token.
-    *   Logic: Uses the stored Shopify access token for the shop to call the Shopify Admin API (Products endpoint) to fetch matching products or products from a category.
-    *   Returns: List of product data (ID, title, description, image URL, etc.).
-*   **Data Flow:** Selected product(s) data (IDs, titles, descriptions) is stored in the frontend's state to be passed to subsequent steps.
+    *   A Polaris `Autocomplete` component for product search.
+    *   **Single Item Plans:** User selects one product or defines one topic.
+    *   **Multi-Item Plans:**
+        *   UI allows selecting multiple products (e.g., displayed as tags).
+        *   May include options for category selection or "All Products" if within plan limits (`productProcessingLimit`).
+        *   Alternatively, UI may allow defining multiple distinct topics or keyword clusters if not product-based.
+*   **Backend Interaction (e.g., `POST /api/shopify/products/search` for products):**
+    *   Fetches product data from Shopify if applicable.
+*   **Data Flow:** Selected product(s) data or topic definitions are stored in the frontend's state for the batch.
 
-## Step 2: Keyword Generation
+## Step 2: Keyword Generation (for the Batch)
 
-*   **Purpose:** Generate relevant keywords based on the selected product(s) and validate them with Google search insights.
+*   **Purpose:** Generate relevant keywords based on the selected product(s) or topics for the entire batch.
 *   **UI (React/Polaris):**
-    *   Displays a list of AI-generated keywords.
-    *   Shows the top X keywords (e.g., 25, based on plan's `keywordGenerationLimit`) with the highest search volume (obtained from Google Ads API).
-    *   Each keyword is presented with a `Checkbox` for user selection/deselection.
-    *   A "Select All" / "Deselect All" option.
-*   **Backend Interaction (Cloud Function - e.g., `POST /api/content/generate-keywords`):**
-    *   Receives: List of selected product data (titles, descriptions), `shop_id`.
+    *   Displays AI-generated keywords relevant to the selected batch of items.
+    *   Shows top X keywords (e.g., based on plan's `keywordGenerationLimit`) potentially with search volume insights.
+    *   Checkboxes for user selection/deselection of keywords to apply to the batch.
+*   **Backend Interaction (e.g., `POST /api/content/generate-keywords`):**
+    *   Receives: Data for selected products/topics.
+    *   Logic: Uses AI (e.g., Gemini) and potentially Google Ads API to generate, validate, and rank keywords for the batch.
+    *   Returns: A list of keywords for user selection.
+*   **Data Flow:** Keywords selected by the user for the batch are stored in frontend state.
+
+## Step 3: Related Questions (for the Batch, Plan-Dependent)
+
+*   **Purpose:** Fetch "People Also Ask" (PAA) style questions related to the selected keywords for the batch, enriching potential article content. This step is only available if enabled by the user's plan.
+*   **UI (React/Polaris):**
+    *   Displays a list of PAA questions relevant to the batch's keywords.
+    *   Checkboxes for user selection, limited by `relatedQuestions.maxQuestionsToRetrieve` if applicable.
+*   **Backend Interaction (e.g., `POST /api/content/get-related-questions`):**
+    *   Receives: Selected keywords for the batch.
+    *   Logic: Calls the internal Python PAA service (see `jules.python-paa-service-setup.md`) for the keywords.
+    *   Returns: List of relevant questions, respecting plan limits.
+*   **Data Flow:** Selected questions for the batch are stored in frontend state.
+
+## Step 4: Batch Article Outline Generation
+
+*   **Purpose:** Generate an initial article outline for *each* selected product or topic in the batch, using the finalized keywords and questions.
+*   **UI (React/Polaris):**
+    *   After keywords and questions are confirmed for the batch, the user initiates this step (e.g., by clicking "Generate All Outlines").
+    *   A loading state is displayed while the backend processes the batch request.
+*   **Backend Interaction (Cloud Function - `POST /api/content/initiate-multi-article-job`):**
+    *   **Reference:** This process is detailed in `docs/jules/shopify-app/tech-design.multi-article-flow.md`.
+    *   Receives:
+        *   A list of items (selected products or defined topics).
+        *   The finalized keywords and questions applicable to the batch.
+        *   `shop_id` from the verified session token.
     *   Logic:
-        1.  Sends product information to Gemini AI (or equivalent) to brainstorm an initial list of potential keywords.
-        2.  Takes the AI-generated keywords and queries the Google Ads API (Keyword Planner - requires appropriate setup and potentially a linked manager account, or careful use of the API for keyword research) to get search volume and other insights.
-        3.  Filters and ranks keywords based on search volume and relevance.
-        4.  Returns the top X keywords (as per plan limit) to the frontend.
-*   **Data Flow:** Selected keywords are stored in the frontend's state.
+        1.  Creates an overall "job" to track the batch.
+        2.  For each item in the batch, it triggers the AI-powered outline generation logic.
+        3.  Each generated outline is stored as a distinct potential article linked to the job.
+    *   Returns: A confirmation that the job has been initiated, along with identifiers for the job and the individual article outlines created (or stubs for them).
+*   **Outcome & Next Step - The Article Workspace:**
+    *   Upon successful completion of batch outline generation, the user is typically navigated to an "Article Workspace" (or a similar dashboard/list view as described in `tech-design.multi-article-flow.md`).
+    *   This workspace displays all the outlines generated from the batch, each representing a potential article (e.g., "Outline for Product A," "Outline for Topic X"). Each will show a status like "Outline Ready for Review."
+    *   **Crucially, detailed editing of a specific outline or proceeding to construct the full text for an article occurs *after* this step, by selecting an individual article/outline from the Article Workspace.**
 
-## Step 3: Related Questions (Plan-Dependent)
+## Transition to Individual Article Processing
 
-*   **Purpose:** Fetch "People Also Ask" (PAA) style questions related to the selected keywords to enrich the article content. This step is only available if enabled by the user's plan.
-*   **UI (React/Polaris):**
-    *   Displays a list of PAA questions fetched by the backend.
-    *   Each question has a `Checkbox` for user selection/deselection.
-    *   The number of questions displayed/selectable can be limited by the plan's `relatedQuestions.maxQuestionsToRetrieve` setting.
-*   **Backend Interaction (Cloud Function - e.g., `POST /api/content/get-related-questions`):**
-    *   Receives: List of selected keywords, `shop_id`.
-    *   Logic:
-        1.  Calls the internal Python PAA service (described in `docs/jules/shopify-app/jules.python-paa-service-setup.md`) with the keywords.
-        2.  The Python service scrapes Google for PAA data and returns it.
-        3.  The Node.js function processes the response from the Python service.
-        4.  Returns the list of relevant questions to the frontend, respecting plan limits.
-        5.  Handles errors from the PAA service gracefully (e.g., by returning an empty list or an error message).
-*   **Data Flow:** Selected questions are stored in the frontend's state.
+Once the batch outline generation is complete and the outlines are available in the Article Workspace, the user transitions from batch setup to processing individual articles one by one.
 
-## Step 4: Article Outline Generation
+The user will select a specific article outline from the workspace to:
+1.  Review and optionally edit the outline in detail.
+2.  Approve the outline.
+3.  Proceed to "Article Construction" (generating the full text).
+4.  Proceed to "Image Generation" (if applicable).
+5.  Finally, commit/export the article.
 
-*   **Purpose:** Create SEO-optimized article outlines based on the selected keywords and (if applicable) related questions.
-*   **UI (React/Polaris):**
-    *   Displays one or more generated article outlines. Each outline includes:
-        *   Suggested H1 Title (editable `TextField`).
-        *   A list of H2 headings (editable `TextField`s, reorderable, deletable).
-        *   Potentially H3 subheadings under H2s (editable, reorderable, deletable).
-        *   Text suggestions for what imagery might be appropriate for different sections.
-    *   If multiple products were selected, the UI needs a way to manage outlines for each (e.g., tabs, an accordion, a list of articles to outline).
-*   **Backend Interaction (Cloud Function - e.g., `POST /api/content/generate-outlines`):**
-    *   Receives: Selected keywords, selected questions (if any), product data, `shop_id`.
-    *   Logic:
-        1.  Sends the inputs to Gemini AI (or equivalent) with a prompt engineered to create SEO-optimized article outlines (including target character counts for H1, structure for H2s/H3s, and image suggestions).
-        2.  If multiple products/keyword clusters are involved, the AI might be prompted to generate multiple distinct outlines.
-        3.  Returns the generated outline(s) data structure to the frontend.
-*   **Data Flow:** User-edited and approved outline(s) are stored in the frontend's state.
+These subsequent steps of processing a *single selected article* will be detailed in documents like `jules.article-construction-and-imaging.md` and `jules.publishing-and-export.md`, building upon the foundation laid by the `tech-design.multi-article-flow.md`.
 
-## Multi-Article Flow Management (Interim Note)
-
-If multiple products were selected or if the keyword/question selection naturally leads to multiple distinct article topics, the UI needs a clear way for the user to manage this from Step 4 onwards.
-
-*   **Suggestion from Previous Discussion:** After "Article Outline Generation" for all selected inputs, the user might enter an "Article Editor/Generator Workspace."
-    *   This workspace would list all articles for which outlines have been approved.
-    *   The user selects one article from this list to proceed with "Article Construction" and "Image Generation" for that specific article.
-    *   Once an article is fully processed (constructed, images generated/skipped), they return to this workspace to select the next article.
-
-This approach avoids deeply nested steps within the main multi-step form and provides a clearer batch processing experience. The following steps (Construction, Imaging, Commit) would then apply to one article at a time, selected from this workspace.
-
-This core flow sets the stage for content creation. The subsequent steps of article construction, image generation, and publishing will be detailed in the next document.
+This document focuses on the initial phase: gathering inputs for a potential batch of articles and generating all their outlines. The "Article Workspace" then serves as the central hub for the subsequent per-article workflows.
