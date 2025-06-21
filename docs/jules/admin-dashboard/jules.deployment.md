@@ -44,6 +44,15 @@ Your backend, consisting of Express.js routes running within Cloud Functions, is
     ```
 *   Ensure `your-chosen-region` (e.g., `us-central1`, `europe-west1`) is consistent and appropriate for your user base and other services.
 
+### 2.3. API URL Configuration for Frontend
+The Admin Dashboard frontend needs to know which API URL to target for backend requests.
+*   **Production:** The production API will be accessible via a custom domain like `api.shopifycontentagent.by.goodcode.ca`.
+*   **Staging & Development:** Corresponding subdomains (e.g., `staging.api.shopifycontentagent.by.goodcode.ca`, `dev.api.shopifycontentagent.by.goodcode.ca`) or the default Firebase function URLs will be used for these environments.
+
+The Admin Dashboard frontend will be configured during its build process (managed by CI/CD) to point to the appropriate API backend URL for each environment. This is typically handled using environment variables during the frontend build (e.g., `REACT_APP_API_BASE_URL`).
+
+Refer to `docs/jules/environments-and-cicd-strategy.md` for the overall custom domain and environment strategy.
+
 ## 3. Deploying Frontend (React/Polaris Admin Dashboard)
 
 (Derived from Grok Outline Section 8.1, adapted for Firebase Hosting)
@@ -92,6 +101,17 @@ The React/Polaris admin dashboard frontend is deployed to Firebase Hosting.
     firebase deploy --only hosting
     ```
 *   The CLI will upload your static assets. After completion, it will provide the URL where your admin dashboard is hosted (e.g., `https://your-project-id.web.app`).
+
+### 3.4. Custom Domain for Admin Dashboard
+The production Admin Dashboard will be accessible via a custom domain like `shopifycontentagent.com` (if the admin dashboard is the primary site) or `admin.shopifycontentagent.com` (if `shopifycontentagent.com` is for a marketing site).
+
+This involves:
+*   Connecting your custom domain (e.g., `shopifycontentagent.com`) to your **production** Firebase Hosting site in the Firebase console.
+*   Configuring DNS records (A, TXT, CNAME as required by Firebase) with your domain registrar as per Firebase instructions.
+
+For development and staging environments, corresponding subdomains like `dev.shopifycontentagent.com` and `staging.shopifycontentagent.com` (or `admin-dev.shopifycontentagent.com`, `admin-staging.shopifycontentagent.com`) will be connected to their respective Firebase projects' Hosting sites.
+
+Refer to `docs/jules/environments-and-cicd-strategy.md` for the complete custom domain strategy across all environments and services.
 
 ## 4. Deploying Both Backend and Frontend
 *   To deploy all Firebase services (Functions, Hosting, Firestore rules, etc.) defined in your `firebase.json` simultaneously:

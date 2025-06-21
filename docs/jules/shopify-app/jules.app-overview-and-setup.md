@@ -118,6 +118,9 @@ The Shopify CLI will create a `web/frontend` directory (or similar, e.g., `front
         }
         ```
 *   **Shopify App URL:** In your Shopify Partner Dashboard, the App URL for your application will point to the Firebase Hosting URL for this deployment (e.g., `https://your-project-id.web.app` or `https://shopify-app.your-project-id.web.app` if using multiple hosting sites).
+    The Shopify App URL configured in the Shopify Partner Dashboard will ultimately point to the production custom domain for the app's frontend (e.g., `app.shopifycontentagent.com` or a specific path on `shopifycontentagent.com` if structured that way).
+    For development and staging environments, distinct URLs pointing to their respective Firebase Hosting sites (e.g., `app-dev.shopifycontentagent.com`, `app-staging.shopifycontentagent.com`) will be used. This may require separate Shopify App configurations in the Partner Dashboard for each environment if distinct App URLs and API key/secret pairs are needed per environment, or careful management of a single app configuration with dynamic redirect URIs if supported and chosen.
+    Refer to `docs/jules/environments-and-cicd-strategy.md` for the overall custom domain and environment strategy.
 
 ### 2.5. Firebase SDK (JavaScript) for Frontend
 *   Install the Firebase JavaScript SDK in your Shopify app's frontend:
@@ -135,6 +138,6 @@ The Shopify CLI will create a `web/frontend` directory (or similar, e.g., `front
     *   Wrap with Polaris `AppProvider`.
     *   If using App Bridge, wrap with `Provider` from `@shopify/app-bridge-react` and configure it with your Shopify app API key and the shop origin.
     *   Set up `react-router-dom` for navigation (e.g., `/`, `/onboarding`, `/create-article`, `/settings`).
-*   **API Service Module:** Create a dedicated module (e.g., `src/services/api.js`) for making authenticated `fetch` calls to your backend Cloud Functions. This module will use App Bridge to get the session token for the `Authorization` header.
+*   **API Service Module:** Create a dedicated module (e.g., `src/services/api.js`) for making authenticated `fetch` calls to your backend Cloud Functions. This module will use App Bridge to get the session token for the `Authorization` header. The API service module will need to be configured with the correct backend API base URL (e.g., `https://api.shopifycontentagent.by.goodcode.ca` for production, or its dev/staging equivalents) for the environment it's built for. This is typically managed via environment variables during the CI/CD build process.
 
 This initial setup creates the skeleton for your "Content Agent" Shopify app frontend, ready for implementing authentication, onboarding, and the core content generation features.

@@ -50,17 +50,24 @@ Once the app is installed and basic authentication is established, the user goes
 
 ### 2.3. Stripe Payment Process (for Paid Plans)
 *   **UI (React/Polaris Component/Page):**
-    *   After user selects a paid plan, the UI calls a backend endpoint to initiate Stripe Checkout.
+    *   After user selects a paid plan:
+        *   The UI should display the selected plan's details and price.
+        *   Include a Polaris `TextField` labeled "Discount Code" or "Promo Code" where the user can optionally enter a code.
+    *   When the user clicks "Proceed to Payment" (or similar button):
+        *   The React frontend captures the selected `planId` and the value from the discount code `TextField` (if any).
+        *   It then calls a backend endpoint to initiate Stripe Checkout, including the discount code in the payload.
 *   **Backend Logic (Cloud Function):**
     *   Endpoint: e.g., `POST /api/subscriptions/create-checkout-session`
-    *   Receives: `planId` (e.g., "pro_monthly_usd"), `shop_id` (from session).
+    *   Receives: `{ planId: "pro_monthly_usd", discountCode: "USER_ENTERED_CODE" (optional), shop_id: "verified_shop_id" }`.
     *   Logic:
         1.  Retrieve the selected plan's details from Firestore, including its `stripePriceId`.
         2.  Retrieve or create a Stripe `Customer` for the `shop_id` (store `stripeCustomerId` in `shops/{shop_id}` in Firestore).
-        3.  Create a Stripe Checkout Session:
+        3.  Prepare options for Stripe Checkout Session creation.
+            *   If a `discountCode` is provided in the request and is valid (Stripe will validate this when `allow_promotion_codes` is enabled or if you pass specific coupon IDs), include it in the session creation parameters. Stripe Checkout can often handle `allow_promotion_codes=true` to let users enter codes on the Stripe-hosted page, or you can pass specific promotion codes directly. For passing a code from your UI to Stripe to apply, you'd typically use the `discounts` parameter with a `coupon` or `promotion_code` ID if your backend validates and fetches the ID first, or rely on `allow_promotion_codes`.
+            *   For simplicity here, we'll assume the backend might pass a validated promotion code ID or use `allow_promotion_codes`. The example below shows `allow_promotion_codes`.
             ```javascript
             // const stripe = require('stripe')(functions.config().stripe.secret_key);
-            // const session = await stripe.checkout.sessions.create({
+            // let checkoutOptions = {
             //   payment_method_types: ['card'],
             //   line_items: [{ price: stripePriceId, quantity: 1 }],
             //   mode: 'subscription',
@@ -68,8 +75,41 @@ Once the app is installed and basic authentication is established, the user goes
             //   success_url: 'https://your-app-url/onboarding/payment-success?session_id={CHECKOUT_SESSION_ID}',
             //   cancel_url: 'https://your-app-url/onboarding/select-plan?payment_cancelled=true',
             //   metadata: { shop_id: shop_id, planId: planId } // Important for webhook
-            // });
+            // };
+            //
+            // // Option 1: If your UI collects the code and you want Stripe to apply it (simplest for UI)
+            // if (discountCode) { // discountCode is the actual string like "SUMMER20"
+            //   checkoutOptions.allow_promotion_codes = true;
+            //   // Note: For Stripe to auto-apply a code passed this way, it's more complex.
+            //   // Usually, you'd pass a specific promotion_code ID to the `discounts` array.
+            //   // The example below assumes `allow_promotion_codes` is used, and user might re-enter on Stripe page,
+            //   // OR your backend has logic to find a Promotion Code ID from `discountCode` string to pass to `discounts` array.
+            //   // For a direct application of a known code string that maps to a Promotion Code ID:
+            //   // if (validPromotionCodeId) { checkoutOptions.discounts = [{ promotion_code: validPromotionCodeId }]; }
+            // }
+            //
+            // const session = await stripe.checkout.sessions.create(checkoutOptions);
             ```
+             **Revised Backend Logic for `create-checkout-session` regarding `discountCode`:**
+             The backend receives `discountCode` (string) from the frontend. It should attempt to find a corresponding active Promotion Code ID in Stripe. If found, it passes this ID to the `discounts` array in `stripe.checkout.sessions.create`. If not found, it could ignore it or return an error. Alternatively, set `allow_promotion_codes = true` on the Checkout session, and the user can enter the code on the Stripe page. The `allow_promotion_codes` approach is simpler if the user is okay re-entering or if the code is mainly for Stripe's UI.
+             To directly apply the code from your UI:
+             ```javascript
+             // ...
+             const checkoutSessionPayload = {
+                 // ... other params ...
+                 allow_promotion_codes: true, // Allows codes to be entered on Stripe's page
+             };
+
+             if (discountCode) { // discountCode is the string like "SUMMER10"
+                // Optional: You could try to find a promotion code ID on Stripe based on the discountCode string
+                // and add it to checkoutSessionPayload.discounts = [{promotion_code: 'promo_xxxx'}];
+                // For simplicity, allow_promotion_codes=true is often sufficient.
+                // If you want to ensure a specific code is applied, you'd need more logic here
+                // to map the user-entered string to a Stripe Promotion Code ID.
+             }
+             const session = await stripe.checkout.sessions.create(checkoutSessionPayload);
+             // ...
+             ```
         4.  Return the `sessionId` from the Stripe Checkout Session to the frontend.
 *   **Frontend Redirect to Stripe:**
     *   The React frontend uses Stripe.js to redirect the user to the Stripe Checkout page using the received `sessionId`.

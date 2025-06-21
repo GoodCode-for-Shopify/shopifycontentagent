@@ -150,8 +150,20 @@ Stripe will be used for handling all subscriptions, payments, and discount codes
     *   Note down the **Stripe Price IDs** for each of these; they will be used when creating subscriptions.
 
 ### 3.3. Discount Codes (Coupons)
-*   In the Stripe Dashboard, create Coupons that your admin users or marketing team can distribute (e.g., "10PERCENTOFF" for 10% off for 3 months, "SAVE50" for a one-time $50 discount).
-*   These coupon IDs can be applied when creating a subscription.
+*   Stripe's Coupons or Promotion Codes are to be created and managed directly within the Stripe Dashboard by administrators.
+*   Key attributes that administrators would typically configure in the Stripe Dashboard include:
+    *   **Code Value:** The actual code string customers will use (e.g., "SUMMER20", "SAVE10NOW", "WELCOMEGIFT").
+    *   **Discount Type:** Whether the discount is a percentage (e.g., 10% off) or a fixed amount (e.g., $20 off).
+    *   **Amount/Percentage Off:** The specific value of the discount.
+    *   **Duration:** How long the discount applies (e.g., once, for a specific number of months like "3 months", or forever).
+    *   **Redemption Limits:**
+        *   Total number of times a coupon can be redeemed across all customers.
+        *   Whether it can be used multiple times by the same customer (often limited to once per customer).
+    *   **Expiration Date:** A date after which the coupon can no longer be redeemed.
+    *   **Applicability:** Restrictions on which products or prices (i.e., our subscription plans) the coupon can be applied to.
+*   The "Content Agent" admin dashboard (for V1) will **not** provide an interface to *create or manage* these codes via the Stripe API.
+*   Instead, the Shopify app will allow *users* to *apply* these pre-existing, admin-created codes during the Stripe Checkout process.
+*   The admin dashboard *might* list active coupon/promotion codes fetched from Stripe for admin awareness and reference (this display feature would be detailed in `jules.admin-dashboard.admin-dashboard-development.md` if implemented).
 
 ### 3.4. Webhooks
 *   Configure Stripe webhooks to notify your backend (a specific HTTP Cloud Function) about important subscription events.
