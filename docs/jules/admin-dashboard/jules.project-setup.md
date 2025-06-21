@@ -1,6 +1,7 @@
 # Admin Dashboard: Project Setup
 
 This document outlines the initial project setup for the Shopify App's Administrative Dashboard. It covers requirements definition and development environment configuration, ensuring alignment with our core technology stack (Firebase, Firestore, Cloud Functions, React/Polaris).
+This project setup will be applied across distinct development, staging, and production environments, as mandated by the 'Multi-Environment Strategy' detailed in `docs/jules.authority.md` and implemented according to `docs/jules/environments-and-cicd-strategy.md`.
 
 ## 1. Requirements Definition
 
