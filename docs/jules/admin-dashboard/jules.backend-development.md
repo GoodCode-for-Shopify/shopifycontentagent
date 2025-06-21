@@ -277,6 +277,11 @@ adminApi.delete('/plans/:planId', async (req, res) => {
   }
 });
 
+// **Public API Endpoint for Plan Listing**
+// While admin users manage plans via the `/admin/plans` endpoints, the end-user Shopify app will need to display available plans during onboarding. A separate, read-only endpoint, such as `GET /api/plans-listing`, should be created. This endpoint would:
+//     *   Be authenticated using the standard Shopify app session token (not admin authentication).
+//     *   Fetch active (non-archived) plans from the `plans` collection in Firestore.
+//     *   Return a subset of plan data suitable for public display (e.g., plan name, description, price, currency, feature list like product processing limit, keyword limit, related questions enabled/count). It should not expose sensitive details like Stripe Product/Price IDs if not needed by the frontend client directly for display.
 
 // Example: Tenant (Shop) Management
 adminApi.get('/shops', async (req, res) => {

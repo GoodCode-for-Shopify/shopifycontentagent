@@ -44,9 +44,9 @@ While `docs/jules/serverside-setup.md` covers the basic `shops` collection for c
         *   **`features` (Map):** Contains various configurable feature limits and flags for the plan.
             *   `productProcessingLimit`: (Number) Max number of products that can be processed simultaneously (e.g., 1 for Free/Basic, 5 for Pro).
             *   `keywordGenerationLimit`: (Number) Max number of keywords generated per product.
-            *   `faqGeneration`: (Map)
-                *   `enabled`: (Boolean) Whether FAQ generation is included.
-                *   `maxQuestions`: (Number) Max number of FAQ questions generated per product.
+            *   `relatedQuestions`: (Map)
+                *   `enabled`: (Boolean) Whether the "Related Questions" (PAA) feature is included.
+                *   `maxQuestionsToRetrieve`: (Number) Max number of "Related Questions" to fetch per keyword/product.
             *   `apiCallLimit`: (Number, optional) Overall API call limit for a specific period for this plan, if applicable beyond individual feature limits.
             *   `usesDeveloperCredentials`: (Map, optional) e.g., `{ gemini_ai: true, google_api_key: false }` indicating if this plan inherently uses developer-provided keys for certain services. This might influence the Stripe Price ID selected or created.
             *   `customBooleanFeatureFlag1`: (Boolean, example) For future feature toggles.

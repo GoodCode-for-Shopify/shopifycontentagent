@@ -41,7 +41,7 @@ Once the app is installed and basic authentication is established, the user goes
 
 ### 2.2. Initial Plan Selection
 *   **UI (React/Polaris Page):**
-    *   Display available plans (Free, Basic, Pro, Enterprise features and pricing). This data is fetched from your backend (`GET /api/plans` - an endpoint that reads from the admin-configured `plans` collection in Firestore).
+    *   Display available plans (Free, Basic, Pro, Enterprise features and pricing). This UI fetches the list of available plans (names, features, prices) by making an authenticated call to a backend endpoint such as `GET /api/plans-listing`.
     *   Clearly indicate the "default" plan (e.g., Free) and any "suggested" plan, based on flags set in the plan configuration by the admin team.
     *   Allow users to select a plan.
 *   **Backend Logic (Cloud Function):**
