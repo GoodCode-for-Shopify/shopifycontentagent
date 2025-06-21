@@ -66,6 +66,12 @@ The following technologies have been selected and are considered authoritative f
 *   **API Usage Tracking:**
     *   The system must track API usage for different tenants, especially if developer-provided credentials or usage quotas are involved. This will likely involve Firestore for logging usage counts against `shop_id` and API type.
 *   **Modularity and Reusability:** Backend services built for the admin dashboard should be reusable for the end-user Shopify app where applicable.
+*   **Multi-Environment Strategy (Dev/Staging/Prod):**
+    *   The application ecosystem (Backend, Admin Dashboard, Shopify App, PAA Service) will be maintained across separate Development, Staging, and Production environments to ensure stability, enable safe testing, and manage configurations effectively.
+    *   Each environment will utilize distinct Firebase projects for complete data and service isolation.
+    *   A CI/CD pipeline (e.g., using GitHub Actions) will manage automated testing and deployments to these environments based on a defined Git branching strategy.
+    *   Custom domains will be used for production services, with corresponding subdomains for staging and development environments.
+    *   For detailed implementation of this strategy, refer to `docs/jules/environments-and-cicd-strategy.md`.
 
 ## 3. Document Precedence
 

@@ -1,6 +1,7 @@
 # Content Agent Shopify App: Overview and Setup
 
 This document provides an overview of the "Content Agent" Shopify app and outlines the initial project setup for its frontend. The app aims to help merchants create SEO-enhanced, conversion-optimized blog articles for their Shopify store or for export to other platforms.
+The setup described herein will be replicated for development, staging, and production environments, adhering to the project's 'Multi-Environment Strategy' (see `docs/jules.authority.md`) and detailed in `docs/jules/environments-and-cicd-strategy.md`.
 
 ## 1. App Overview
 
